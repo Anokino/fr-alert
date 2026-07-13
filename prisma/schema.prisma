@@ -1,0 +1,29 @@
+// France Alert — schéma Prisma (SQLite en dev, migrable Postgres).
+// Persiste les signalements citoyens ; la source `citizen.ts` les projette en Incident[].
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  moduleSlug  String // "fire", "flood", ...
+  title       String
+  description String?
+  severity    String   @default("yellow") // green | yellow | orange | red
+  lat         Float
+  lng         Float
+  status      String   @default("pending") // pending | confirmed | rejected
+  confirmations Int    @default(0)
+  contact     String? // optionnel, non affiché publiquement
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([moduleSlug])
+  @@index([createdAt])
+}

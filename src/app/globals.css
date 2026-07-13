@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   France Alert — design tokens
+   Identité « salle de veille » civile. Sombre par défaut, langage de gravité
+   calqué sur la Vigilance officielle (vert/jaune/orange/rouge).
+--------------------------------------------------------------------------- */
+
+:root {
+  /* Surfaces (dark par défaut) */
+  --background: oklch(0.17 0.02 255);
+  --surface: oklch(0.21 0.022 255);
+  --surface-2: oklch(0.25 0.024 255);
+  --foreground: oklch(0.97 0.005 255);
+  --muted: oklch(0.3 0.02 255);
+  --muted-foreground: oklch(0.72 0.02 255);
+  --border: oklch(0.31 0.02 255);
+  --ring: oklch(0.72 0.13 230);
+
+  --primary: oklch(0.72 0.13 230);
+  --primary-foreground: oklch(0.17 0.02 255);
+
+  /* Gravité — Vigilance FR */
+  --sev-green: oklch(0.76 0.15 155);
+  --sev-yellow: oklch(0.86 0.16 95);
+  --sev-orange: oklch(0.73 0.17 55);
+  --sev-red: oklch(0.63 0.23 25);
+  --sev-green-fg: oklch(0.17 0.02 255);
+  --sev-yellow-fg: oklch(0.17 0.02 255);
+  --sev-orange-fg: oklch(0.17 0.02 255);
+  --sev-red-fg: oklch(0.98 0.01 255);
+
+  /* Accents par module */
+  --m-fire: oklch(0.68 0.2 40);
+  --m-flood: oklch(0.66 0.15 245);
+  --m-water: oklch(0.74 0.12 200);
+  --m-air: oklch(0.72 0.15 300);
+  --m-quake: oklch(0.75 0.13 70);
+  --m-weather: oklch(0.7 0.15 275);
+  --m-health: oklch(0.68 0.19 12);
+
+  --radius: 0.75rem;
+}
+
+.theme-light {
+  --background: oklch(0.98 0.005 255);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.96 0.008 255);
+  --foreground: oklch(0.2 0.02 255);
+  --muted: oklch(0.92 0.01 255);
+  --muted-foreground: oklch(0.48 0.02 255);
+  --border: oklch(0.89 0.01 255);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-sev-green: var(--sev-green);
+  --color-sev-yellow: var(--sev-yellow);
+  --color-sev-orange: var(--sev-orange);
+  --color-sev-red: var(--sev-red);
+
+  --color-m-fire: var(--m-fire);
+  --color-m-flood: var(--m-flood);
+  --color-m-water: var(--m-water);
+  --color-m-air: var(--m-air);
+  --color-m-quake: var(--m-quake);
+  --color-m-weather: var(--m-weather);
+  --color-m-health: var(--m-health);
+
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-jb), ui-monospace, monospace;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 0.25rem);
+  --radius-sm: calc(var(--radius) - 0.4rem);
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Ambiance : léger halo en haut de page, discret. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 40vh;
+  background: radial-gradient(
+    60% 100% at 50% 0%,
+    color-mix(in oklch, var(--primary) 12%, transparent),
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+::selection {
+  background: color-mix(in oklch, var(--primary) 40%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Cibles tactiles : évite le délai de double-tap et le flash de surbrillance. */
+button,
+a,
+[role="button"],
+input,
+textarea,
+select {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Lien d'évitement (accessibilité clavier). */
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: 0.5rem;
+  z-index: 60;
+  transform: translateY(-160%);
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  padding: 0.5rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* MapLibre : neutraliser le fond blanc par défaut, contrôles cohérents. */
+.maplibregl-map {
+  font-family: var(--font-sans);
+  background: var(--surface);
+}
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+}
+.maplibregl-popup-content {
+  background: var(--surface-2);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.4);
+}
+.maplibregl-popup-close-button {
+  color: var(--muted-foreground);
+  font-size: 16px;
+  padding: 2px 6px;
+}
+.maplibregl-popup-tip {
+  border-top-color: var(--surface-2) !important;
+  border-bottom-color: var(--surface-2) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
