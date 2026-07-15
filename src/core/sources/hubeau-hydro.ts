@@ -13,7 +13,10 @@ interface HydroResponse {
   data: HydroStation[];
 }
 
-/** Stations hydrométriques temps réel (Hub'Eau) — contexte du module inondation. */
+/**
+ * Stations hydrométriques temps réel (Hub'Eau) — contexte du module inondation.
+ * API en v2 : la v1 de `hydrometrie` est retirée et répond 403 (≠ 404).
+ */
 export const hydroStationPoi: PoiSource = {
   id: "hydro-station",
   label: "Stations hydrométriques",
@@ -26,7 +29,7 @@ export const hydroStationPoi: PoiSource = {
     try {
       const data = await cached(key, this.ttlSeconds, () =>
         fetchJson<HydroResponse>(
-          `https://hubeau.eaufrance.fr/api/v1/hydrometrie/referentiel/stations` +
+          `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations` +
             `?bbox=${minLng},${minLat},${maxLng},${maxLat}&size=200&format=json`,
         ),
       );

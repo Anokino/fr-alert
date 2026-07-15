@@ -48,7 +48,7 @@ futur partagent la **même API**.
 | Module    | Slug     | Sources live                                   | POIs contextuels                   |
 |-----------|----------|------------------------------------------------|------------------------------------|
 | Incendies | `fire`   | NASA FIRMS (clé), signalements citoyens        | Bornes incendie, casernes (OSM)    |
-| Inondations | `flood` | Hub'Eau hydrométrie, Vigicrues*, signalements  | Stations hydro, mairies (OSM)      |
+| Inondations | `flood` | Vigicrues, Vigilance MF (clé)*, signalements    | Stations hydro, mairies (OSM)      |
 | Eau potable | `water` | Hub'Eau qualité eau potable                    | Réseaux/UDI par commune            |
 | Qualité de l'air | `air` | Open-Meteo Air Quality                      | —                                  |
 | Séismes   | `quake`  | EMSC seismicportal (FDSN)                       | —                                  |
@@ -233,14 +233,18 @@ une 500 pour une simple source en échec.
 ## 6. Sources de données (catalogue)
 
 Voir `docs/SOURCES.md` pour le détail (endpoints, clés, TTL, statut de vérification).
-Résumé du statut vérifié le 2026-07-13 :
+Résumé du statut vérifié le 2026-07-15 :
 
 - ✅ **keyless OK** : Open-Meteo Air Quality, EMSC seismicportal (FDSN), Hub'Eau qualité eau
-  potable, RappelConso (dataset `rappelconso-v2-gtin-espaces`), Overpass (OSM),
+  potable, **Vigicrues** (flux `.geojson`), **Hub'Eau hydrométrie v2** (stations),
+  RappelConso (dataset `rappelconso-v2-gtin-espaces`), Overpass (OSM),
   geo.api.gouv.fr (géocodage commune).
-- ⚠️ **keyless à fiabiliser** : Vigicrues webservice officiel → fallback Hub'Eau hydrométrie.
 - 🔑 **clé requise (optionnel)** : NASA FIRMS (`FIRMS_MAP_KEY`), Météo-France Vigilance
-  (`METEOFRANCE_TOKEN`). Modules dégradent proprement si absentes.
+  (`METEOFRANCE_TOKEN` — pas d'alternative keyless : l'API répond 401 sans token et seule
+  l'archive est sur data.gouv.fr). Modules dégradent proprement si absentes.
+
+Deux pièges d'URL vérifiés en direct, à ne pas réintroduire : Vigicrues `.jsonld` → **404**
+(utiliser `.geojson`) ; Hub'Eau `hydrometrie` **v1 → 403** (la v1 est retirée, utiliser v2).
 
 ---
 
