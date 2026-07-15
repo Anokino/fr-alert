@@ -88,9 +88,77 @@ Statut vérifié le **2026-07-15**. `✅` = testé et fonctionnel, `⚠️` = à
 - Colonnes : `latitude,longitude,bright_ti4,acq_date,acq_time,confidence,frp`.
 - Sévérité par FRP/confidence.
 
-### Météo-France Vigilance 🔑
-- Portail API Météo-France (token OAuth applicatif). Couvre vent, orages, pluie-inondation,
-  crues, canicule, etc. par département. À brancher quand un token est fourni.
+### Portail API Météo-France 🔑 (3 APIs, **un seul token**)
+
+Compte souscrit à **trois** APIs gratuites sous l'application `DefaultApplication`,
+abonnements valides jusqu'au **15/07/2028**. Les trois partagent la **même** application,
+donc **un seul `METEOFRANCE_TOKEN` suffit** — inutile de multiplier les variables d'env.
+
+**Authentification** : en-tête **`apikey: <token>`**. Vérifié en direct — `Authorization:
+Bearer <token>` est **refusé** (401 `900901 Invalid Credentials`) avec une API key.
+
+**Type de token** : prendre l'**API key** à longue durée (validité en secondes ; ~63072000 s
+= 2 ans, aligné sur la fin d'abonnement), **pas** l'OAuth2 à 1 h. L'OAuth2 imposerait un flux
+client-credentials (cache du token, 401 → refresh → retry) dans un chemin fail-soft, pour de
+l'open data public en lecture seule. Si une rotation devient souhaitable, l'OAuth2 se
+rajoutera derrière la même variable d'env.
+
+Base commune : `https://public-api.meteofrance.fr/public/<API>/v1/…`
+
+| API | id portail / base | Ressource utile | Format | Quota |
+|-----|-----------|-----------------|--------|-------|
+| Bulletin Vigilance | `DPVigilance` | `/cartevigilance/encours`, `/textesvigilance/encours` | JSON | 60/min |
+| Météo des forêts | `DPMeteoForets` | `/carte/encours`, `/carte/departement/encours` | **CSV** | 100/min |
+| Bulletin Avalanche | `DPBRA` (à confirmer) | `/liste-massifs`, `/massif/BRA` | **XML** | 100/min |
+
+⚠️ Les ids du portail (`DonneesPubliquesVigilance`) ne sont **pas** les bases d'URL
+(`DPVigilance`). Pour Météo des forêts, seul `DPMeteoForets` répond — `DPMeteoDesForets`,
+`DPForets` et `DPMeteoForet` renvoient 404.
+
+#### Bulletin Vigilance ✅ → modules `weather` + `flood`
+Vérifié en direct le 2026-07-15 (épisode caniculaire : 69 départements en orange). Sortie de
+l'app **recoupée département par département contre la donnée brute** — concordance totale.
+Descriptif technique officiel (PDF) : `data.gouv.fr/api/1/datasets/r/85a64f7e-8b3f-47be-80f0-b3dd9cdd01d0`.
+
+- `/cartevigilance/encours` : niveau par **département**, jours J et J+1, 9 phénomènes.
+  C'est la source de référence de l'échelle de gravité du projet — `color_id` **est** notre
+  `Severity`, sans traduction : `1` vert, `2` jaune, `3` orange, `4` rouge.
+- `phenomenon_id` (table officielle) : `1` vent · `2` pluie · `3` orages · **`4` crues** ·
+  `5` neige/verglas · `6` canicule · `7` grand froid · `8` avalanches · `9` vagues-submersion.
+- **Le phénomène `4` (crues) n'est PAS émis** : Vigicrues le couvre déjà au tronçon près,
+  alors que la Vigilance est départementale. L'émettre afficherait deux incidents pour un
+  seul danger et gonflerait le compteur de la home. `flood` ne prend donc que `2`
+  (pluie-inondation = ruissellement/crues rapides, un aléa distinct) ; `weather` prend le
+  reste. `8` (avalanches) restera dans `weather` jusqu'au module dédié.
+- **Pièges vérifiés en direct** :
+  - Pour les crues (`4`), `timelaps_items` est **toujours vide** (documenté, voulu) — lire
+    `phenomenon_max_color_id`, jamais la chronologie.
+  - `periods` contient **un seul bloc (J) entre 0h et 6h locales** : ne jamais supposer que
+    J+1 existe.
+  - `domain_ids` mélange 96 départements (2 car., dont `2A`/`2B`), 25 littoraux
+    départementaux (`3010`…) et `FRA`. Filtrer sur la longueur pour cibler un département.
+  - `/textesvigilance/encours` peut répondre **404 « no matching blob »** : c'est un cas
+    **nominal** prévu par le web service, pas une panne. Ce produit peut aussi être
+    **désynchronisé** de la carte → comparer `meta/product_datetime` avant de les croiser.
+    (Non utilisé aujourd'hui : la carte suffit.)
+- Diffusion : au moins 2×/jour (6h et 16h locales), et plus souvent si la situation l'exige.
+  TTL 30 min.
+
+#### Météo des forêts → module `weather` (**pas** `fire`)
+- ⚠️ **CSV**, pas JSON (`text/csv`) — le catalogue ne le précise pas. Colonnes :
+  `reference_time;dep_code;niveau_j1;niveau_j2;dep_nom`, 96 lignes (dont `2A`/`2B`).
+  Utiliser `fetchText` (comme FIRMS), pas `fetchJson`.
+- Niveau de danger de feux de forêt par **département**, pour **J+1 et J+2 uniquement** —
+  il n'existe pas de valeur « maintenant ».
+- **Décision (2026-07-15)** : rattaché à `weather`, pas à `fire`. C'est une prévision météo,
+  au même titre que la Vigilance ; `fire` reste dédié aux feux **réels et en direct**
+  (FIRMS, signalements). Et parce que c'est une prévision, elle **ne doit pas alimenter le
+  verdict « maintenant »** de la home (principes produit n°1 et n°3, cf. CONTEXT.md §1) :
+  l'afficher comme un risque daté, pas comme un incident en cours.
+
+#### Bulletin Avalanche → futur module `avalanche`
+- Reporté à la saison (nov.–mai) : aucun bulletin actif en été, donc invérifiable. Voir
+  `docs/ROADMAP.md`. Seule source **XML** du projet → nécessitera un parser.
 
 ## Ajouter une source
 Voir `CONTEXT.md` §5.2 pour le contrat `IncidentSource` / `PoiSource`.

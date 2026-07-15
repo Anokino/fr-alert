@@ -17,10 +17,10 @@ export const weatherModule: IncidentModule = {
       body: "Vert : pas de vigilance. Jaune : soyez attentif. Orange : soyez très vigilant, phénomènes dangereux prévus. Rouge : vigilance absolue, phénomènes exceptionnels.",
     },
     {
-      id: "source",
-      title: "Activation de la source",
+      id: "phenomenes",
+      title: "Ce que couvre la Vigilance",
       kind: "info",
-      body: "La vigilance météo officielle nécessite une clé Météo-France. Une fois configurée, les alertes de votre département s'affichent ici automatiquement.",
+      body: "Météo-France surveille neuf phénomènes : vent violent, pluie-inondation, orages, crues, neige-verglas, canicule, grand froid, avalanches et vagues-submersion. Le niveau affiché ici est celui de votre département pour aujourd'hui. Les crues sont suivies séparément dans l'espace Inondations, au tronçon de cours d'eau près.",
     },
   ],
 };

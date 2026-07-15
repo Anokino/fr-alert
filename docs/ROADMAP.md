@@ -25,9 +25,15 @@
       niveaux testé sur fixture (tout est vert en juillet).
 - [x] Citizen (signalements) ✅ round-trip testé
 - [x] FIRMS (clé) — adaptateur prêt, s'active avec FIRMS_MAP_KEY
-- [~] Météo-France Vigilance (clé) — squelette prêt, mapping DPVigilance à finaliser.
-      **Bloqué sur un token** : l'API répond 401 sans clé et data.gouv.fr ne publie que
-      l'archive, pas le temps réel. Aucune voie keyless.
+- [x] **Météo-France Vigilance** ✅ vérifié en direct le 2026-07-15 sur un épisode
+      caniculaire réel (69 dép. en orange) — sortie recoupée département par département
+      contre la donnée brute MF, concordance totale. Alimente `weather` (7 phénomènes) et
+      `flood` (pluie-inondation). Le phénomène « crues » est écarté au profit de Vigicrues,
+      plus fin. Auth `apikey:`, pas Bearer.
+- [ ] Météo des forêts (même token) — danger de feux **prévu J+1/J+2** par département.
+      ⚠️ **CSV**, pas JSON.
+      Va dans le module **weather** (c'est une prévision météo), pas fire : fire reste les
+      feux réels et directs. Ne doit pas alimenter le verdict « maintenant » de la home.
 
 ## Modules
 - [x] fire  [x] flood  [x] water  [x] air  [x] quake  [x] weather  [x] health
@@ -37,6 +43,13 @@
 - [ ] Câbler les hauteurs d'eau Hub'Eau (`observations_tr`) dans le détail d'une station
 - [ ] Notifications push mobile (`/api/subscribe`, service worker)
 - [ ] Modération des signalements + votes de confirmation
+- [ ] **Module `avalanche` (8e module)** — API Bulletin Avalanche (BRA), déjà souscrite,
+      même token. Décidé le 2026-07-15 : **repoussé à la saison** (nov.–mai). Motif : mi-
+      juillet aucun bulletin n'est actif, donc invérifiable sur données réelles. La doc du
+      portail MF est complète, donc l'implémentation ne sera pas à l'aveugle pour autant.
+      Ressources : `/liste-massifs`, `/massif/BRA`. ⚠️ **XML**, seule source non-JSON du
+      projet → prévoir un parser. Ce module sera le test grandeur nature du « ajouter un
+      module = ajouter un fichier ».
 - [ ] EFFIS surfaces brûlées, GDACS alertes globales, Atmo indices détaillés
 - [ ] Cache Redis multi-instances ; historique & tendances par zone
 - [ ] Polices : self-host des .woff2 pour supprimer la dépendance réseau à gstatic
