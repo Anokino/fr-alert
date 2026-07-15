@@ -17,20 +17,18 @@ export function makeCitizenSource(moduleSlug: string): IncidentSource {
 
     async fetch(ctx): Promise<Incident[]> {
       const since = new Date(Date.now() - MAX_AGE_HOURS * 3600 * 1000);
-      let reports;
-      try {
-        reports = await prisma.report.findMany({
-          where: {
-            moduleSlug,
-            status: { not: "rejected" },
-            createdAt: { gte: since },
-          },
-          orderBy: { createdAt: "desc" },
-          take: 300,
-        });
-      } catch {
-        return []; // base non initialisée → fail-soft
-      }
+      // Pas de try/catch ici : le fail-soft appartient à `runSource` (registry.ts), qui
+      // logge et marque `meta.sources[].ok=false`. Avaler l'erreur ici renverrait [] en
+      // annonçant un succès — l'UI dirait « aucun signalement » base éteinte.
+      const reports = await prisma.report.findMany({
+        where: {
+          moduleSlug,
+          status: { not: "rejected" },
+          createdAt: { gte: since },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 300,
+      });
 
       return reports
         .filter((r) => pointInBBox({ lat: r.lat, lng: r.lng }, ctx.bbox))

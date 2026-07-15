@@ -23,36 +23,34 @@ export const hydroStationPoi: PoiSource = {
   attribution: "Hub'Eau · SCHAPI / Vigicrues",
   ttlSeconds: 24 * 3600,
 
+  // Pas de try/catch ici : le fail-soft appartient à `collectPois` (registry.ts), qui logge
+  // et marque la couche `ok=false`. Avaler l'erreur ici renverrait une couche vide en
+  // annonçant un succès — c'est ce qui a masqué le retrait de la v1 (403) pendant 2 jours.
   async fetch(ctx): Promise<Poi[]> {
     const [minLng, minLat, maxLng, maxLat] = ctx.bbox;
     const key = `hydro-station:${ctx.bbox.map((n) => n.toFixed(2)).join(",")}`;
-    try {
-      const data = await cached(key, this.ttlSeconds, () =>
-        fetchJson<HydroResponse>(
-          `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations` +
-            `?bbox=${minLng},${minLat},${maxLng},${maxLat}&size=200&format=json`,
-        ),
-      );
-      return (data.data ?? [])
-        .map((s): Poi | null => {
-          if (s.latitude_station == null || s.longitude_station == null)
-            return null;
-          return {
-            id: `hydro-station:${s.code_station}`,
-            layerId: this.id,
-            label: s.libelle_station ?? "Station",
-            lat: s.latitude_station,
-            lng: s.longitude_station,
-            props: {
-              coursEau: s.libelle_cours_eau,
-              enService: s.en_service,
-              code: s.code_station,
-            },
-          };
-        })
-        .filter((x): x is Poi => x !== null);
-    } catch {
-      return [];
-    }
+    const data = await cached(key, this.ttlSeconds, () =>
+      fetchJson<HydroResponse>(
+        `https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations` +
+          `?bbox=${minLng},${minLat},${maxLng},${maxLat}&size=200&format=json`,
+      ),
+    );
+    return (data.data ?? [])
+      .map((s): Poi | null => {
+        if (s.latitude_station == null || s.longitude_station == null) return null;
+        return {
+          id: `hydro-station:${s.code_station}`,
+          layerId: this.id,
+          label: s.libelle_station ?? "Station",
+          lat: s.latitude_station,
+          lng: s.longitude_station,
+          props: {
+            coursEau: s.libelle_cours_eau,
+            enService: s.en_service,
+            code: s.code_station,
+          },
+        };
+      })
+      .filter((x): x is Poi => x !== null);
   },
 };

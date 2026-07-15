@@ -274,6 +274,13 @@ rouge) — vernaculaire authentique de la sécurité civile FR, pas un accent d�
 - Toujours `cn()` pour composer les classes ; CVA pour les variantes.
 - Jamais de secret côté client. Les clés vivent en env serveur, lues dans les adaptateurs.
 - Tout appel réseau externe est *fail-soft* et caché via `core/cache.ts`.
+- **Le fail-soft appartient au registre, pas à l'adaptateur.** Une source qui échoue *laisse
+  remonter* son erreur : `runSource` / `collectPois` (registry.ts) la loggent et posent
+  `ok=false`. Un `try/catch { return [] }` dans un adaptateur produit une couche vide
+  annoncée comme un **succès** — l'app affiche alors « aucun incident » alors qu'elle est
+  aveugle. C'est un mensonge sur la fraîcheur de la donnée, donc une violation du principe
+  produit n°3 (§1). Deux pannes réelles ont été masquées ainsi (Hub'Eau v1 retirée → 403,
+  `DATABASE_URL` absente) ; corrigé le 2026-07-15.
 
 ---
 
