@@ -30,8 +30,11 @@
       contre la donnée brute MF, concordance totale. Alimente `weather` (7 phénomènes) et
       `flood` (pluie-inondation). Le phénomène « crues » est écarté au profit de Vigicrues,
       plus fin. Auth `apikey:`, pas Bearer.
-- [ ] Météo des forêts (même token) — danger de feux **prévu J+1/J+2** par département.
-      ⚠️ **CSV**, pas JSON.
+- [x] **Météo des forêts** ✅ vérifié en direct le 2026-07-16 — recoupé département par
+      département contre le CSV brut. Rattaché à `weather` (pas `fire` : Météo-France
+      précise que « ce n'est pas une carte des incendies »). Émis avec `forecast: true` →
+      hors beacon, bandeau « Risques prévus » dédié. ⚠️ CSV ; échéance dérivée de
+      `reference_time` en heure de Paris ; saisonnier (3 juin → automne).
       Va dans le module **weather** (c'est une prévision météo), pas fire : fire reste les
       feux réels et directs. Ne doit pas alimenter le verdict « maintenant » de la home.
 

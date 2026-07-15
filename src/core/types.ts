@@ -32,6 +32,14 @@ export interface Incident {
   url?: string;
   /** Vrai pour les incidents non localisés précisément (ex. rappel national). */
   national?: boolean;
+  /**
+   * Vrai pour un risque **prévu**, pas en cours (ex. Météo des forêts, à J+1).
+   * La home l'exclut du beacon et du compteur « N incidents à proximité » et l'affiche dans
+   * son propre bandeau daté : le verdict de la home porte sur *maintenant* et ne doit pas
+   * s'allumer pour demain (principes produit n°1 et n°3, cf. §1). `startedAt` porte alors
+   * la date d'échéance du risque. Même mécanique que `national`.
+   */
+  forecast?: boolean;
   /** Données spécifiques au module (affichées dans le détail). */
   props?: Record<string, unknown>;
 }

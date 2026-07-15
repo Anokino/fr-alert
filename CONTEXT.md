@@ -150,6 +150,8 @@ interface Incident {
   sourceId: string;        // id de la source
   sourceLabel: string;     // affichable
   url?: string;            // lien détail officiel
+  national?: boolean;      // non localisé (ex. rappel) → bandeau dédié, hors beacon
+  forecast?: boolean;      // risque prévu, pas en cours → bandeau dédié, hors beacon
   props?: Record<string, unknown>; // spécifique au module
 }
 
@@ -205,6 +207,15 @@ interface IncidentModule {
   enabled(): boolean;         // false si dépend d'une clé absente ET pas d'autre source
 }
 ```
+
+**Le verdict de la home porte sur « maintenant, ici ».** Le beacon, le compteur
+« N incidents à proximité » et les pastilles de modules se calculent sur
+`incidents.filter(i => !i.national && !i.forecast)`. Les deux drapeaux servent la même
+mécanique : sortir du verdict ce qui n'y a pas sa place, et l'afficher dans son propre
+bandeau. `national` = pas localisé (rappel produit) ; `forecast` = pas encore là (risque
+annoncé, `startedAt` porte alors l'échéance). Une source qui n'est ni l'un ni l'autre allume
+le beacon — c'est le défaut, et il doit rester réservé à ce qui se produit réellement (§1,
+principes 1 et 3).
 
 **Ajouter un module** = créer `src/core/modules/<slug>.ts`, l'enregistrer dans
 `registry.ts`. Rien d'autre à toucher : API et UI le prennent en compte automatiquement.

@@ -68,8 +68,11 @@ export default function ModulePage() {
 
   const mod = data?.module;
   const incidents = data?.incidents ?? [];
-  const local = incidents.filter((i) => !i.national);
+  // Même règle que la home : « à proximité » = en cours et localisé. Les risques prévus
+  // sont listés à part et n'apparaissent pas sur la carte (ils n'ont pas encore de lieu).
+  const local = incidents.filter((i) => !i.national && !i.forecast);
   const national = incidents.filter((i) => i.national);
+  const forecast = incidents.filter((i) => i.forecast && !i.national);
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-8">
@@ -156,7 +159,7 @@ export default function ModulePage() {
               ? `${local.length} incident${local.length > 1 ? "s" : ""} à proximité`
               : "Situation locale"}
           </h2>
-          {local.length === 0 && national.length === 0 ? (
+          {local.length === 0 && national.length === 0 && forecast.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-surface/50 px-5 py-10 text-center text-sm text-muted-foreground">
               {loading ? "Chargement…" : "Aucun incident actif dans votre secteur."}
             </div>
@@ -182,6 +185,27 @@ export default function ModulePage() {
                 />
               ))}
             </div>
+          )}
+
+          {forecast.length > 0 && (
+            <>
+              <h3 className="mb-1 mt-8 font-display text-base font-semibold">
+                Risques prévus
+              </h3>
+              <p className="mb-3 text-sm text-muted-foreground">
+                Niveaux annoncés, pas des incidents en cours.
+              </p>
+              <div className="grid gap-2.5">
+                {forecast.map((inc) => (
+                  <IncidentCard
+                    key={inc.id}
+                    incident={inc}
+                    accent={mod?.accent}
+                    moduleIcon={mod?.icon}
+                  />
+                ))}
+              </div>
+            </>
           )}
         </section>
 

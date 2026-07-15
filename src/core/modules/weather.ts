@@ -1,3 +1,4 @@
+import { meteoFranceForetsSource } from "../sources/meteofrance-forets";
 import { makeMeteoFranceVigilance } from "../sources/meteofrance-vigilance";
 import type { IncidentModule } from "../types";
 
@@ -7,7 +8,7 @@ export const weatherModule: IncidentModule = {
   tagline: "Tempête, orages, canicule, neige",
   icon: "cloud-lightning",
   accent: "var(--m-weather)",
-  sources: [makeMeteoFranceVigilance("weather")],
+  sources: [makeMeteoFranceVigilance("weather"), meteoFranceForetsSource],
   poiLayers: [],
   contextPanels: [
     {

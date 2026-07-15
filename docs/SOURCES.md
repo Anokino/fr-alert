@@ -144,17 +144,34 @@ Descriptif technique officiel (PDF) : `data.gouv.fr/api/1/datasets/r/85a64f7e-8b
 - Diffusion : au moins 2×/jour (6h et 16h locales), et plus souvent si la situation l'exige.
   TTL 30 min.
 
-#### Météo des forêts → module `weather` (**pas** `fire`)
+#### Météo des forêts ✅ → module `weather` (**pas** `fire`)
+Vérifié en direct le 2026-07-16 ; sortie **recoupée département par département** contre le
+CSV brut (Aude/Gard/Var/Nord élevé, Ain/Paris modéré) — concordance totale.
+Fiche produit officielle (PDF) : `data.gouv.fr/api/1/datasets/r/7ce90994-113c-4fb2-831a-14c79adba96e`.
+
 - ⚠️ **CSV**, pas JSON (`text/csv`) — le catalogue ne le précise pas. Colonnes :
   `reference_time;dep_code;niveau_j1;niveau_j2;dep_nom`, 96 lignes (dont `2A`/`2B`).
   Utiliser `fetchText` (comme FIRMS), pas `fetchJson`.
-- Niveau de danger de feux de forêt par **département**, pour **J+1 et J+2 uniquement** —
-  il n'existe pas de valeur « maintenant ».
-- **Décision (2026-07-15)** : rattaché à `weather`, pas à `fire`. C'est une prévision météo,
-  au même titre que la Vigilance ; `fire` reste dédié aux feux **réels et en direct**
-  (FIRMS, signalements). Et parce que c'est une prévision, elle **ne doit pas alimenter le
-  verdict « maintenant »** de la home (principes produit n°1 et n°3, cf. CONTEXT.md §1) :
-  l'afficher comme un risque daté, pas comme un incident en cours.
+- Échelle officielle à 4 niveaux : `1` faible · `2` modéré · `3` élevé · `4` très élevé
+  (vert/jaune/orange/rouge) → même mapping que la Vigilance.
+- **Rattaché à `weather`, pas à `fire`** : la fiche produit le dit noir sur blanc — « la
+  Météo des forêts **n'est pas une carte des incendies en cours ou à venir** ». C'est un
+  indicateur de prévention météo ; `fire` reste dédié aux feux **réels et en direct**
+  (FIRMS, signalements). Les incidents portent donc `forecast: true` et n'allument jamais le
+  beacon (cf. CONTEXT.md §5.1).
+- ⚠️ **« J+1 » est relatif à la date de DIFFUSION, pas à maintenant.** Le produit est publié
+  chaque jour vers **17h heures locales** pour le lendemain et le surlendemain. De minuit à
+  17h, le dernier produit disponible est celui de la veille : son `niveau_j1` désigne alors
+  **aujourd'hui**. Calculer l'échéance depuis `Date.now()` affiche « demain » à tort les
+  deux tiers de la journée → dériver l'échéance de `reference_time`.
+- ⚠️ **Faire ce calcul en `Europe/Paris`**, pas en UTC : les jours du produit sont des jours
+  français. En UTC, entre minuit et 2h du matin on est encore la veille → même bug d'un jour.
+- ⚠️ **Produit saisonnier** : diffusé seulement **du 3 juin à l'automne**. Hors saison le
+  flux peut être absent ou périmé — un `reference_time` de plus de 48 h est ignoré (cas
+  nominal, pas une panne).
+- Émis à partir du niveau `2` (modéré), comme toutes les sources du projet (seul le vert est
+  écarté). En plein été la majorité des départements sont à `2` : si le bandeau « Risques
+  prévus » devient bruyant, monter le seuil à `3` (élevé) est un changement d'une ligne.
 
 #### Bulletin Avalanche → futur module `avalanche`
 - Reporté à la saison (nov.–mai) : aucun bulletin actif en été, donc invérifiable. Voir

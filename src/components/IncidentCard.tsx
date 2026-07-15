@@ -56,7 +56,16 @@ export function IncidentCard({
             <span className="font-mono">{distanceKm.toFixed(1)} km</span>
           )}
           {incident.national && <span>National</span>}
-          <span>{timeAgo(incident.startedAt)}</span>
+          {/* Pour un risque prévu, l'échéance est déjà dans le titre : ce libellé porte donc
+              la fraîcheur de la donnée (date de diffusion). Sinon il afficherait « il y a
+              7 min » — l'heure de début de l'échéance — pour un bulletin vieux de 7 h. */}
+          <span>
+            {timeAgo(
+              incident.forecast
+                ? (incident.updatedAt ?? incident.startedAt)
+                : incident.startedAt,
+            )}
+          </span>
           <span className="truncate">{incident.sourceLabel}</span>
           {incident.url && (
             <a
