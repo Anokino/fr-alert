@@ -102,28 +102,31 @@ par distance.
 - [ ] **Self-host du GeoJSON des contours départementaux** (555 KB, statique) pour supprimer
       la dépendance à `raw.githubusercontent.com` — même raison que les polices (voir plus bas).
 
-## Périmètres de feux EFFIS + filtre hotspots contextuels (chantier, décidé le 2026-07-16)
+## Périmètres de feux EFFIS + filtre hotspots contextuels (2026-07-16)
 
 Idée de l'utilisateur, inspirée de Fireguard : afficher les **périmètres de zones brûlées
-EFFIS** (Copernicus) dans le module incendies (couche `fill`, l'archi est prête), ET s'en
-servir comme **validateur contextuel** pour les hotspots FIRMS.
+EFFIS** (Copernicus) dans le module incendies, ET s'en servir comme **validateur contextuel**
+pour les hotspots FIRMS.
 
-- [ ] **Couche périmètres EFFIS** (`render: "fill"`, module incendies uniquement).
-- [ ] **Filtre contextuel des hotspots** : à l'intérieur d'un périmètre EFFIS connu, on sait
-      qu'un point chaud n'est *pas* une source industrielle → **abaisser le seuil** d'émission
-      FIRMS pour les détections qui tombent dans un périmètre (point-in-polygon), tout en
-      gardant un plancher (« sauf vraiment trop bas »). C'est de la **priorisation
-      déterministe contextuelle** — même esprit que le score d'importance. Nécessite un vrai
-      test point-dans-polygone (ray casting), en plus de `bboxIntersects` déjà présent.
+- [x] **Couche périmètres EFFIS** ✅ vérifiée en direct le 2026-07-16 (Fontainebleau 456 ha,
+      Corse). Source vectorielle WFS GeoJSON sur `maps.effis` (pas les tuiles WMTS ; détail et
+      pièges dans `docs/SOURCES.md`). `render: "fill"`, module incendies uniquement, gravité
+      par surface brûlée. **Fenêtre temporelle réglable** (3 j par défaut, sélecteur 3/7/14/30
+      dans l'UI du module) via le nouveau `FetchContext.params` (couches paramétrables).
+- [x] **Filtre contextuel des hotspots** ✅ vérifié en direct le 2026-07-16. Dans/près d'un
+      périmètre EFFIS, le seuil FIRMS passe de 3,5 MW à **1 MW** (plancher voulu par
+      l'utilisateur). Câblé dans l'adaptateur FIRMS, fail-soft sur EFFIS (s'il ne répond pas,
+      seuil normal partout). **Cas réel capturé** : un foyer résiduel de **3 MW à Fontainebleau**
+      (dans le périmètre du feu de 456 ha) est désormais émis alors qu'il aurait été jeté comme
+      « probablement industriel ».
+      ⚠️ **Tolérance ~2 km indispensable** (`pointWithinKmOfPolygon`, pas un simple
+      point-dans-polygone) : le périmètre EFFIS est la zone *déjà brûlée* (cartographiée la
+      veille), le hotspot est sur le *front actif* qui a progressé + géoloc satellite ~1 km →
+      mesuré, les foyers sont à 1-4 km des périmètres, jamais strictement dedans. Sans buffer,
+      le filtre ne capture rien.
 
-> ⚠️ **Bloqué au 2026-07-16 : EFFIS est en panne serveur.** Le WFS `ies-ows.jrc.ec.europa.eu`
-> renvoie une erreur Oracle (`Cannot create OCI Handlers. Connection failure`) sur **toutes**
-> ses couches, WMS compris ; le serveur alternatif `maps.effis.emergency.copernicus.eu`
-> timeout. Impossible de vérifier le schéma des périmètres ni de tester le filtre → **pas de
-> code à l'aveugle**, on branche quand le service répond. Pistes vérifiées : couche
-> **`ms:ercc.ba`** (Burnt Areas = polygones) via `?service=WFS&request=GetFeature&
-> typeName=ms:ercc.ba&outputFormat=application/json` ; hotspots en points via
-> `ms:ercc.hs_24hrs_point`. Re-sonder le schéma exact et l'ordre bbox WFS 2.0 au retour.
+> Note : le layout va devenir chargé (rayon + couches + fenêtre EFFIS). L'utilisateur a acté
+> un **rework complet du layout du module** plus tard ; on tolère le provisoire d'ici là.
 
 ## Veille & statuts d'événements — crawler (chantier v2, décidé le 2026-07-16)
 

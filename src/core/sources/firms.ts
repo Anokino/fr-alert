@@ -1,5 +1,11 @@
 import { cached, fetchText } from "../cache";
-import { FRANCE_BBOX, distanceKm, pointInBBox } from "../geo";
+import {
+  FRANCE_BBOX,
+  distanceKm,
+  pointInBBox,
+  pointWithinKmOfPolygon,
+} from "../geo";
+import { recentBurntPerimeters, type BurntPerimeter } from "./effis-burnt";
 import type {
   Incident,
   IncidentSource,
@@ -78,6 +84,19 @@ const CELL_DEG = 0.05;
 
 /** Seuil d'émission (MW). Calibré côté prudence : mieux vaut une torchère qu'un feu manqué. */
 const MIN_FRP = 3.5;
+/**
+ * Seuil abaissé pour un foyer situé DANS un périmètre de feu EFFIS connu : là, on sait que la
+ * chaleur n'est pas une source industrielle, donc un foyer plus faible reste pertinent. Le
+ * plancher à 1 MW écarte quand même le bruit vraiment infime (choix de l'utilisateur).
+ */
+const MIN_FRP_IN_BURNT = 1;
+/**
+ * Tolérance autour d'un périmètre EFFIS pour rattacher un hotspot : le front actif est
+ * typiquement 1-3 km hors de la zone déjà brûlée (cf. `pointWithinKmOfPolygon`). ~0,03° en
+ * degrés pour le pré-filtre bbox.
+ */
+const BURNT_BUFFER_KM = 2;
+const BURNT_BUFFER_DEG = 0.03;
 
 function frpSeverity(frp: number): Severity {
   if (frp >= 100) return "red";
@@ -289,9 +308,38 @@ export const firmsSource: IncidentSource = {
 
     const clusters = await nationalClusters(key, this.ttlSeconds);
 
+    // Périmètres de feux EFFIS récents, pour le seuil contextuel. Fail-soft : EFFIS est lent
+    // et instable ; s'il ne répond pas, on garde simplement le seuil normal partout — le rôle
+    // de FIRMS ne dépend pas de lui. (Ici le catch NE masque PAS une panne de FIRMS : c'est
+    // une source auxiliaire dont l'absence dégrade seulement le raffinement du seuil.)
+    let perimeters: BurntPerimeter[] = [];
+    try {
+      perimeters = await recentBurntPerimeters();
+    } catch (err) {
+      console.error("[firms] périmètres EFFIS indisponibles — seuil normal", err);
+    }
+    const inBurntPerimeter = (p: LatLng) =>
+      perimeters.some((pm) => {
+        // Pré-filtre : bbox du périmètre élargie du buffer (rejet rapide).
+        const [x0, y0, x1, y1] = pm.bbox;
+        if (
+          p.lng < x0 - BURNT_BUFFER_DEG ||
+          p.lng > x1 + BURNT_BUFFER_DEG ||
+          p.lat < y0 - BURNT_BUFFER_DEG ||
+          p.lat > y1 + BURNT_BUFFER_DEG
+        ) {
+          return false;
+        }
+        return pointWithinKmOfPolygon(p, pm.geometry, BURNT_BUFFER_KM);
+      });
+
     return clusters.flatMap((c): Incident[] => {
-      if (c.frp < MIN_FRP) return [];
       if (!pointInBBox(c.hottest, ctx.bbox)) return [];
+
+      // Dans un périmètre de feu connu, un foyer plus faible reste pertinent (pas industriel).
+      const inBurnt = inBurntPerimeter(c.hottest);
+      const threshold = inBurnt ? MIN_FRP_IN_BURNT : MIN_FRP;
+      if (c.frp < threshold) return [];
 
       const sensors = c.sensors.map((s) => SENSOR_LABEL[s] ?? s).join(", ");
       const passages =
@@ -303,10 +351,12 @@ export const firmsSource: IncidentSource = {
           id: `firms:${c.hottest.lat.toFixed(2)},${c.hottest.lng.toFixed(2)}`,
           moduleSlug: "fire",
           title: "Foyer thermique détecté par satellite",
-          description:
-            `Chaleur repérée par ${sensors} (${passages}), puissance ${c.frp.toFixed(0)} MW. ` +
-            `Un foyer thermique n'est pas forcément un incendie : il peut s'agir d'un site ` +
-            `industriel ou d'un brûlage agricole.`,
+          description: inBurnt
+            ? `Chaleur repérée par ${sensors} (${passages}), puissance ${c.frp.toFixed(0)} MW, ` +
+              `dans un périmètre de feu EFFIS récent — probable incendie en cours ou en reprise.`
+            : `Chaleur repérée par ${sensors} (${passages}), puissance ${c.frp.toFixed(0)} MW. ` +
+              `Un foyer thermique n'est pas forcément un incendie : il peut s'agir d'un site ` +
+              `industriel ou d'un brûlage agricole.`,
           severity: frpSeverity(c.frp),
           lat: c.hottest.lat,
           lng: c.hottest.lng,
@@ -319,6 +369,7 @@ export const firmsSource: IncidentSource = {
             frpMw: Math.round(c.frp),
             pixels: c.pixels,
             capteurs: c.sensors.map((s) => SENSOR_LABEL[s] ?? s),
+            ...(inBurnt ? { inBurntPerimeter: true } : {}),
           },
         },
       ];

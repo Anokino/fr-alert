@@ -44,12 +44,15 @@ export async function fetchPois(
   moduleSlug: string,
   bbox: BBox,
   layerIds?: string[],
+  extra?: Record<string, string | number>,
 ): Promise<Poi[]> {
   const params = new URLSearchParams({
     module: moduleSlug,
     bbox: bboxParam(bbox),
   });
   if (layerIds?.length) params.set("layers", layerIds.join(","));
+  // Paramètres de couche réglables (ex. { days: 3 } pour les périmètres de feux).
+  for (const [k, v] of Object.entries(extra ?? {})) params.set(k, String(v));
   const res = await fetch(`/api/pois?${params}`, { cache: "no-store" });
   if (!res.ok) return [];
   return (await res.json()).pois;

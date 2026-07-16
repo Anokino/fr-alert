@@ -72,6 +72,12 @@ export interface FetchContext {
   bbox: BBox;
   center?: LatLng;
   signal?: AbortSignal;
+  /**
+   * Paramètres de couche réglables par l'utilisateur (ex. fenêtre temporelle des périmètres
+   * de feux : `{ days: "3" }`). Transmis depuis la query string de `/api/pois`. Une source
+   * qui n'en attend pas les ignore ; toujours prévoir un défaut.
+   */
+  params?: Record<string, string>;
 }
 
 /** Contrat d'une source d'incidents. fail-soft : peut throw, capté en amont. */

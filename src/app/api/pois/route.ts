@@ -27,8 +27,16 @@ export async function GET(req: NextRequest) {
     ? layersParam.split(",").map((s) => s.trim()).filter(Boolean)
     : undefined;
 
+  // Paramètres de couche réglables (tout sauf les clés réservées). Ex. `days` pour la
+  // fenêtre temporelle des périmètres de feux.
+  const RESERVED = new Set(["module", "bbox", "layers"]);
+  const layerParams: Record<string, string> = {};
+  for (const [k, v] of params.entries()) {
+    if (!RESERVED.has(k)) layerParams[k] = v;
+  }
+
   const { pois, sources } = await collectPois(
-    { bbox, center: bboxCenter(bbox) },
+    { bbox, center: bboxCenter(bbox), params: layerParams },
     moduleSlug,
     layerIds,
   );

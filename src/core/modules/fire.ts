@@ -1,4 +1,5 @@
 import { makeCitizenSource } from "../sources/citizen";
+import { effisBurntPoi } from "../sources/effis-burnt";
 import { firmsHeatPoi, firmsSource } from "../sources/firms";
 import { fireHydrantPoi, fireStationPoi } from "../sources/overpass";
 import type { IncidentModule } from "../types";
@@ -19,6 +20,14 @@ export const fireModule: IncidentModule = {
       source: firmsHeatPoi,
       render: "heatmap",
       weightProp: "frp",
+    },
+    {
+      id: "effis-burnt",
+      label: "Zones brûlées",
+      icon: "flame-kindling",
+      color: "var(--m-fire)",
+      source: effisBurntPoi,
+      render: "fill",
     },
     {
       id: "fire-hydrant",

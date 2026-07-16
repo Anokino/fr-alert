@@ -64,13 +64,41 @@ Statut vérifié le **2026-07-15**. `✅` = testé et fonctionnel, `⚠️` = à
   les 96), via une bbox pré-calculée par département (`bboxIntersects`).
 - ⚠️ Dépendance à `raw.githubusercontent.com` → self-host à terme (cf. `docs/ROADMAP.md`).
 
-### EFFIS / Copernicus 🔴 (périmètres de feux — **en panne au 2026-07-16**)
-- WFS `ies-ows.jrc.ec.europa.eu/effis`. Couche cible : **`ms:ercc.ba`** (Burnt Areas =
-  périmètres polygonaux, ce que Fireguard affiche) ; hotspots en `ms:ercc.hs_24hrs_point`.
-- **Panne serveur** : toutes les couches renvoient `msOracleSpatialLayerOpen(): Cannot create
-  OCI Handlers. Connection failure` (WMS compris) ; le serveur alt
-  `maps.effis.emergency.copernicus.eu` timeout. Schéma des périmètres **non vérifié** → à
-  sonder au retour, ne pas coder à l'aveugle. Détail et usage (filtre hotspots) dans ROADMAP.
+### EFFIS / Copernicus ✅ (périmètres de zones brûlées) → module `fire`, couche `fill`
+Vérifié en direct le 2026-07-16 sur données françaises réelles (Fontainebleau 456 ha, Corse).
+
+- ⚠️ **Deux serveurs EFFIS, ne pas les confondre** :
+  - `ies-ows.jrc.ec.europa.eu/effis` = **souvent en panne** (erreur Oracle `Cannot create OCI
+    Handlers`). C'est celui qu'on avait trouvé en premier — l'abandonner.
+  - **`maps.effis.emergency.copernicus.eu/effis`** = le serveur du Situation Viewer, **UP**.
+    C'est celui à utiliser.
+- **La source est un WFS vectoriel GeoJSON** (pas les tuiles WMTS `effist/wmts`, qui sont du
+  raster inexploitable pour un filtre) :
+  ```
+  maps.effis.emergency.copernicus.eu/effis?service=WFS&version=1.1.0&request=GetFeature
+    &typename=ms:modis.ba.poly&outputformat=geojson&filter=<Filter OGC sur FIREDATE>
+  ```
+- `outputformat=**geojson**` (pas `json` ni `application/json` → 502). `version=1.1.0`.
+- **Fenêtre temporelle = filtre OGC sur `FIREDATE`**, pas un nom de couche. Les typenames
+  `.today` / `.7days` / `.week` n'existent pas ou renvoient 502 ; `modis.ba.poly` est la base
+  (tout l'historique, 11,8 Mo). On filtre `FIREDATE >= aujourd'hui − N jours` → **réglable**
+  (`ctx.params.days`, défaut **3**). Volumes mesurés (France + voisins) : 3 j → 6 périmètres,
+  30 j → 151.
+- ⚠️ **Le `bbox` WFS est buggé** (ordre d'axes MapServer → 0 résultat partout). On récupère
+  toute l'Europe (léger : ~210 Ko sur 3 j) et on filtre la zone visible nous-mêmes
+  (`bboxIntersects` sur la bbox de chaque polygone). Coordonnées GeoJSON en lng,lat standard.
+- ⚠️ **Serveur lent et instable** : timeouts aléatoires même à 45 s (mapfile géant). Timeout
+  porté à 45 s ; au-delà, fail-soft (couche vide + `ok=false`, cache 30 min une fois chargé).
+- Schéma riche : `FIREDATE`, `COUNTRY`, `PROVINCE`, `COMMUNE`, **`AREA_HA`** (surface, string
+  → Number). Gravité dérivée de la surface : < 30 ha jaune, 30-200 orange, ≥ 200 rouge.
+- **Validateur contextuel des hotspots FIRMS** ✅ (câblé dans `firms.ts`) : un point chaud
+  dans/près d'un périmètre EFFIS n'est pas industriel → seuil abaissé de 3,5 à **1 MW**
+  (plancher). ⚠️ **Tolérance ~2 km obligatoire** (`pointWithinKmOfPolygon`) : périmètre = zone
+  déjà brûlée (veille), hotspot = front actif décalé de 1-4 km + géoloc satellite. Fail-soft :
+  si EFFIS ne répond pas, FIRMS garde son seuil normal (l'échec de cette source auxiliaire ne
+  fait jamais échouer FIRMS). Cas réel : foyer 3 MW à Fontainebleau récupéré.
+- **Data data.europa.eu** (`4bd142ce-…`) et **api2.effis** = culs-de-sac (0 distribution /
+  juste des stats). La couche `ms:ercc.ba` de `ies-ows` aussi (serveur down). Ne pas y revenir.
 
 ### Vigicrues ✅
 - **Piège** : `/services/1/InfoVigiCru.jsonld/` répond **404**. La forme qui fonctionne est

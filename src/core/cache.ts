@@ -59,12 +59,13 @@ export async function fetchWithTimeout(
   }
 }
 
-/** GET JSON avec timeout ; lève si non-2xx. */
+/** GET JSON avec timeout ; lève si non-2xx. `timeoutMs` pour les serveurs lents. */
 export async function fetchJson<T = unknown>(
   url: string,
   init?: RequestInit,
+  timeoutMs?: number,
 ): Promise<T> {
-  const res = await fetchWithTimeout(url, init);
+  const res = await fetchWithTimeout(url, init, timeoutMs);
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} pour ${url}`);
   }

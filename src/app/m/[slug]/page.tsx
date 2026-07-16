@@ -29,6 +29,8 @@ export default function ModulePage() {
   const [activeLayers, setActiveLayers] = useState<string[]>([]);
   const [pois, setPois] = useState<Poi[]>([]);
   const [loading, setLoading] = useState(true);
+  // Fenêtre temporelle des périmètres de feux (couche effis-burnt), réglable.
+  const [burntDays, setBurntDays] = useState(3);
 
   const bbox = useMemo(
     () => (position ? bboxAround(position, radius) : null),
@@ -48,6 +50,8 @@ export default function ModulePage() {
     };
   }, [slug, bbox]);
 
+  const burntActive = activeLayers.includes("effis-burnt");
+
   // Charge les POIs des couches actives.
   useEffect(() => {
     if (!bbox || activeLayers.length === 0) {
@@ -55,11 +59,15 @@ export default function ModulePage() {
       return;
     }
     let cancelled = false;
-    fetchPois(slug, bbox, activeLayers).then((p) => !cancelled && setPois(p));
+    // La fenêtre `days` n'a d'effet que si la couche périmètres est active.
+    const extra = burntActive ? { days: burntDays } : undefined;
+    fetchPois(slug, bbox, activeLayers, extra).then(
+      (p) => !cancelled && setPois(p),
+    );
     return () => {
       cancelled = true;
     };
-  }, [slug, bbox, activeLayers]);
+  }, [slug, bbox, activeLayers, burntActive, burntDays]);
 
   function toggleLayer(id: string) {
     setActiveLayers((cur) =>
@@ -139,6 +147,32 @@ export default function ModulePage() {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Fenêtre temporelle des zones brûlées — visible quand la couche est active. */}
+      {burntActive && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">
+            Zones brûlées sur :
+          </span>
+          <div className="inline-flex rounded-lg border border-border bg-surface p-0.5">
+            {[3, 7, 14, 30].map((d) => (
+              <button
+                key={d}
+                onClick={() => setBurntDays(d)}
+                aria-pressed={burntDays === d}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition",
+                  burntDays === d
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {d} j
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

@@ -234,8 +234,10 @@ annoncé, `startedAt` porte alors l'échéance). Une source qui n'est ni l'un ni
 le beacon — c'est le défaut, et il doit rester réservé à ce qui se produit réellement (§1,
 principes 1 et 3).
 
-**Couches de module** : une couche est **toujours désactivable** et par défaut éteinte. Trois
-rendus. `pins` = des épingles cliquables, une par POI : pour de l'information ponctuelle
+**Couches de module** : une couche est **toujours désactivable** et par défaut éteinte. Une
+couche peut être **paramétrable** par l'utilisateur : les paramètres passent par la query
+string de `/api/pois` → `FetchContext.params` (ex. `days` pour la fenêtre temporelle des
+périmètres de feux EFFIS). Toujours prévoir un défaut. Trois rendus. `pins` = des épingles cliquables, une par POI : pour de l'information ponctuelle
 (une borne, une caserne). `heatmap` = une nappe de densité (ex. détections FIRMS brutes).
 `fill` = des zones colorées par `Poi.severity` (ex. départements en vigilance, périmètres de
 feux EFFIS). `heatmap` et `fill` sont du **contexte visuel** — ni clic ni libellé, jamais une
