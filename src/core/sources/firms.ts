@@ -1,6 +1,13 @@
 import { cached, fetchText } from "../cache";
 import { FRANCE_BBOX, distanceKm, pointInBBox } from "../geo";
-import type { Incident, IncidentSource, LatLng, Severity } from "../types";
+import type {
+  Incident,
+  IncidentSource,
+  LatLng,
+  Poi,
+  PoiSource,
+  Severity,
+} from "../types";
 
 /**
  * NASA FIRMS — points chauds détectés par satellite (module `fire`).
@@ -214,12 +221,12 @@ function summarise(group: Detection[]): Cluster | null {
 }
 
 /**
- * Détections nationales regroupées, en cache. Le regroupement est fait sur une zone fixe et
- * non sur la bbox demandée : sinon deux utilisateurs verraient des foyers différents pour le
- * même feu, et les identifiants ne seraient pas stables (ils le doivent — futures notifs).
+ * Détections nationales brutes, en cache. Zone fixe et non bbox demandée : sinon deux
+ * utilisateurs verraient des foyers différents pour le même feu et les identifiants ne
+ * seraient pas stables (ils le doivent — futures notifications).
  */
-async function nationalClusters(key: string, ttlSeconds: number): Promise<Cluster[]> {
-  return cached("firms:clusters", ttlSeconds, async () => {
+async function nationalDetections(key: string, ttlSeconds: number): Promise<Detection[]> {
+  return cached("firms:detections", ttlSeconds, async () => {
     const sensors = await liveSensors(key);
     if (!sensors.length) return [];
 
@@ -239,7 +246,7 @@ async function nationalClusters(key: string, ttlSeconds: number): Promise<Cluste
       }),
     );
 
-    const dets = csvs.flatMap((r) =>
+    return csvs.flatMap((r) =>
       r === null
         ? []
         : parseCsv(r.csv).flatMap((row): Detection[] => {
@@ -251,10 +258,15 @@ async function nationalClusters(key: string, ttlSeconds: number): Promise<Cluste
             return [{ lat, lng, frp: Number(row.frp) || 0, at, sensor: r.sensor }];
           }),
     );
-
-    // Regrouper d'abord (sur tout le nuage), écarter les foyers éteints ensuite.
-    return cluster(dets).flatMap((g) => summarise(g) ?? []);
   });
+}
+
+/** Foyers nationaux : regrouper d'abord (sur tout le nuage), écarter les éteints ensuite. */
+async function nationalClusters(key: string, ttlSeconds: number): Promise<Cluster[]> {
+  const dets = await nationalDetections(key, ttlSeconds);
+  return cached("firms:clusters", ttlSeconds, async () =>
+    cluster(dets).flatMap((g) => summarise(g) ?? []),
+  );
 }
 
 const SENSOR_LABEL: Record<string, string> = {
@@ -318,5 +330,43 @@ export const firmsSource: IncidentSource = {
     const key = process.env.FIRMS_MAP_KEY;
     if (!key) return false;
     return (await liveSensors(key)).length === 0;
+  },
+};
+
+/**
+ * Nappe thermique — les détections **brutes** des dernières 24 h.
+ *
+ * Ce sont exactement les points que `firmsSource` écarte : trop denses et trop faibles pour
+ * alerter (médiane 3 MW = usines, torchères, brûlages), mais c'est précisément ce qui fait
+ * une bonne carte de chaleur. Rendue en `heatmap` : ni libellé ni clic, du contexte visuel.
+ * Réservée au module incendies — la carte de la home doit rester lisible.
+ */
+export const firmsHeatPoi: PoiSource = {
+  id: "firms-heat",
+  label: "Chaleur détectée (24 h)",
+  attribution: "NASA FIRMS (VIIRS / MODIS)",
+  ttlSeconds: 15 * 60,
+  requiresEnv: "FIRMS_MAP_KEY",
+
+  async fetch(ctx): Promise<Poi[]> {
+    const key = process.env.FIRMS_MAP_KEY;
+    if (!key) throw new Error("FIRMS_MAP_KEY absente");
+
+    const floor = Date.now() - MAX_AGE_MS;
+    const dets = await nationalDetections(key, this.ttlSeconds);
+
+    return dets.flatMap((d): Poi[] => {
+      if (d.at < floor || !pointInBBox(d, ctx.bbox)) return [];
+      return [
+        {
+          id: `firms-heat:${d.sensor}:${d.at}:${d.lat.toFixed(4)},${d.lng.toFixed(4)}`,
+          layerId: this.id,
+          label: `${d.frp.toFixed(0)} MW`,
+          lat: d.lat,
+          lng: d.lng,
+          props: { frp: d.frp },
+        },
+      ];
+    });
   },
 };

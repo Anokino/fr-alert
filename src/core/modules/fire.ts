@@ -1,5 +1,5 @@
 import { makeCitizenSource } from "../sources/citizen";
-import { firmsSource } from "../sources/firms";
+import { firmsHeatPoi, firmsSource } from "../sources/firms";
 import { fireHydrantPoi, fireStationPoi } from "../sources/overpass";
 import type { IncidentModule } from "../types";
 
@@ -11,6 +11,15 @@ export const fireModule: IncidentModule = {
   accent: "var(--m-fire)",
   sources: [firmsSource, makeCitizenSource("fire")],
   poiLayers: [
+    {
+      id: "firms-heat",
+      label: "Chaleur détectée",
+      icon: "thermometer",
+      color: "var(--m-fire)",
+      source: firmsHeatPoi,
+      render: "heatmap",
+      weightProp: "frp",
+    },
     {
       id: "fire-hydrant",
       label: "Bornes incendie",
@@ -38,6 +47,12 @@ export const fireModule: IncidentModule = {
       title: "À quoi servent les bornes incendie ?",
       kind: "definition",
       body: "Les points d'eau (bornes, poteaux) alimentent les pompiers. Connaître les plus proches aide à comprendre la couverture opérationnelle d'un secteur.",
+    },
+    {
+      id: "chaleur",
+      title: "La couche « Chaleur détectée »",
+      kind: "definition",
+      body: "Les satellites repèrent les sources de chaleur au sol. La nappe montre où ils en ont vu ces dernières 24 heures — sans trier : une usine, une torchère ou un brûlage agricole y apparaissent comme un feu. Les foyers listés ci-contre, eux, sont filtrés. Cette couche sert à voir l'ensemble, pas à identifier un incendie.",
     },
   ],
 };

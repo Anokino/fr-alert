@@ -1,5 +1,8 @@
 import { meteoFranceForetsSource } from "../sources/meteofrance-forets";
-import { makeMeteoFranceVigilance } from "../sources/meteofrance-vigilance";
+import {
+  makeMeteoFranceVigilance,
+  makeVigilanceAreaSource,
+} from "../sources/meteofrance-vigilance";
 import type { IncidentModule } from "../types";
 
 export const weatherModule: IncidentModule = {
@@ -9,7 +12,16 @@ export const weatherModule: IncidentModule = {
   icon: "cloud-lightning",
   accent: "var(--m-weather)",
   sources: [makeMeteoFranceVigilance("weather"), meteoFranceForetsSource],
-  poiLayers: [],
+  poiLayers: [
+    {
+      id: "vigilance-zones-weather",
+      label: "Zones de vigilance",
+      icon: "map",
+      color: "var(--m-weather)",
+      source: makeVigilanceAreaSource("weather"),
+      render: "fill",
+    },
+  ],
   contextPanels: [
     {
       id: "niveaux",

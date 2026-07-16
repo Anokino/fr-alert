@@ -11,25 +11,12 @@ import type { Incident, ModuleMeta, Severity } from "@/core/types";
 import { StatusBeacon } from "@/components/StatusBeacon";
 import { ModuleGrid, type ModuleSummary } from "@/components/ModuleGrid";
 import { IncidentCard } from "@/components/IncidentCard";
-import { cn } from "@/lib/utils";
+import { RadiusSelector, zoomForRadius } from "@/components/RadiusSelector";
 
 const MapView = dynamic(
   () => import("@/components/map/MapView").then((m) => m.MapView),
   { ssr: false, loading: () => <div className="size-full animate-pulse bg-surface-2" /> },
 );
-
-const RADII = [10, 25, 50, 100, 200, 500];
-
-/** Zoom cadrant approximativement le rayon demandé. */
-function zoomForRadius(km: number): number {
-  if (km <= 10) return 11;
-  if (km <= 25) return 10;
-  if (km <= 50) return 9;
-  if (km <= 100) return 8;
-  if (km <= 200) return 7;
-  if (km <= 500) return 6;
-  return 5;
-}
 
 export default function HomePage() {
   const { position, status, usingFallback, request } = useGeolocation(true);
@@ -117,22 +104,7 @@ export default function HomePage() {
         />
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-          <div className="inline-flex rounded-lg border border-border bg-surface p-0.5">
-            {RADII.map((r) => (
-              <button
-                key={r}
-                onClick={() => setRadius(r)}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
-                  radius === r
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {r} km
-              </button>
-            ))}
-          </div>
+          <RadiusSelector value={radius} onChange={setRadius} />
           <button
             onClick={request}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-muted-foreground transition hover:text-foreground"

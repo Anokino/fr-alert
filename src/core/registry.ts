@@ -12,6 +12,8 @@ import type {
   IncidentSource,
   ModuleMeta,
   Poi,
+  PoiLayer,
+  PoiSource,
   SourceStatus,
 } from "./types";
 
@@ -31,9 +33,14 @@ export function getModule(slug: string): IncidentModule | undefined {
 }
 
 /** Une source est active si elle ne requiert pas de clé, ou si la clé est présente. */
-export function isSourceActive(source: IncidentSource): boolean {
+export function isSourceActive(source: IncidentSource | PoiSource): boolean {
   if (!source.requiresEnv) return true;
   return Boolean(process.env[source.requiresEnv]);
+}
+
+/** Couches proposables d'un module : celles dont la clé éventuelle est présente. */
+function activeLayers(m: IncidentModule): PoiLayer[] {
+  return m.poiLayers.filter((l) => isSourceActive(l.source));
 }
 
 /** Métadonnées sérialisables d'un module (pour le client). */
@@ -44,11 +51,13 @@ export function moduleMeta(m: IncidentModule): ModuleMeta {
     tagline: m.tagline,
     icon: m.icon,
     accent: m.accent,
-    poiLayers: m.poiLayers.map((l) => ({
+    poiLayers: activeLayers(m).map((l) => ({
       id: l.id,
       label: l.label,
       icon: l.icon,
       color: l.color,
+      render: l.render ?? "pins",
+      weightProp: l.weightProp,
     })),
     contextPanels: m.contextPanels ?? [],
     activeSources: m.sources
@@ -123,9 +132,10 @@ export async function collectPois(
   const m = getModule(moduleSlug);
   if (!m) return { pois: [], sources: [] };
 
+  const available = activeLayers(m);
   const layers = layerIds?.length
-    ? m.poiLayers.filter((l) => layerIds.includes(l.id))
-    : m.poiLayers;
+    ? available.filter((l) => layerIds.includes(l.id))
+    : available;
 
   const results = await Promise.all(
     layers.map(async (layer) => {

@@ -46,6 +46,11 @@ export function pointInBBox(p: LatLng, bbox: BBox): boolean {
   );
 }
 
+/** Deux bbox se chevauchent-elles ? (test de recouvrement de rectangles) */
+export function bboxIntersects(a: BBox, b: BBox): boolean {
+  return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
+}
+
 /** Parse "minLng,minLat,maxLng,maxLat" en BBox validée, ou null. */
 export function parseBBox(raw: string | null): BBox | null {
   if (!raw) return null;

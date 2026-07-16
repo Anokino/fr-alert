@@ -1,7 +1,14 @@
 import { cached, fetchJson } from "../cache";
-import { bboxCenter } from "../geo";
+import { departementContours } from "../departements";
+import { bboxCenter, bboxIntersects } from "../geo";
 import { reverseCommune } from "../geocode";
-import type { Incident, IncidentSource, Severity } from "../types";
+import type {
+  Incident,
+  IncidentSource,
+  Poi,
+  PoiSource,
+  Severity,
+} from "../types";
 
 /**
  * Météo-France Vigilance — produit « carte » (DPVigilance).
@@ -161,6 +168,82 @@ export function makeMeteoFranceVigilance(
               colorId: p.phenomenon_max_color_id,
               echeance: "J",
             },
+          },
+        ];
+      });
+    },
+  };
+}
+
+const COLOR_NAME: Record<Severity, string> = {
+  green: "verte",
+  yellow: "jaune",
+  orange: "orange",
+  red: "rouge",
+};
+
+/**
+ * Couche `fill` : colore les départements selon leur niveau de vigilance (contexte visuel,
+ * comme la carte officielle Météo-France). Distincte des incidents ponctuels de la source
+ * ci-dessus — même donnée, autre représentation, exactement comme la nappe FIRMS vis-à-vis
+ * des foyers.
+ *
+ * La couleur du département = max des phénomènes **du module** (mêmes que les incidents, cf.
+ * `MODULE_PHENOMENA`). Un département orange uniquement pour un phénomène d'un autre module
+ * n'est donc pas coloré ici — cohérent avec ce que la liste d'incidents montre.
+ */
+export function makeVigilanceAreaSource(
+  moduleSlug: "weather" | "flood",
+): PoiSource {
+  return {
+    id: `vigilance-zones-${moduleSlug}`,
+    label: "Zones de vigilance",
+    attribution: "Météo-France",
+    ttlSeconds: 30 * 60,
+    requiresEnv: "METEOFRANCE_TOKEN",
+
+    async fetch(ctx): Promise<Poi[]> {
+      const carte = await fetchCarte(this.ttlSeconds);
+      const periodJ = carte.product?.periods?.find((p) => p.echeance === "J");
+      const domains = periodJ?.timelaps?.domain_ids;
+      if (!domains?.length) return [];
+
+      const wanted = new Set(MODULE_PHENOMENA[moduleSlug] ?? []);
+
+      // Niveau de vigilance par département (2 caractères ; on ignore littoraux et FRA).
+      const levelByDept = new Map<string, number>();
+      for (const d of domains) {
+        if (d.domain_id.length !== 2) continue;
+        const max = d.phenomenon_items.reduce(
+          (m, p) =>
+            wanted.has(p.phenomenon_id)
+              ? Math.max(m, p.phenomenon_max_color_id)
+              : m,
+          1,
+        );
+        if (max > 1) levelByDept.set(d.domain_id, max);
+      }
+      if (!levelByDept.size) return [];
+
+      // Contours (cache long) : on ne renvoie que les départements concernés ET visibles.
+      const contours = await departementContours(24 * 3600);
+
+      return contours.flatMap((dep): Poi[] => {
+        const level = levelByDept.get(dep.code);
+        if (!level || !bboxIntersects(dep.bbox, ctx.bbox)) return [];
+        const severity = COLOR_SEVERITY[level];
+        if (!severity || severity === "green") return [];
+        const center = bboxCenter(dep.bbox);
+        return [
+          {
+            id: `vigilance-zone:${dep.code}`,
+            layerId: this.id,
+            label: `${dep.nom} — vigilance ${COLOR_NAME[severity]}`,
+            lat: center.lat,
+            lng: center.lng,
+            geometry: dep.geometry,
+            severity,
+            props: { departement: dep.code, colorId: level },
           },
         ];
       });

@@ -208,10 +208,21 @@ interface IncidentModule {
   icon: string;               // nom d'icône lucide
   accent: string;             // token de couleur d'accent du module
   sources: IncidentSource[];
-  poiLayers: PoiLayer[];      // { id, label, icon, color, source: PoiSource }
+  poiLayers: PoiLayer[];
   contextPanels?: ContextPanel[]; // blocs d'info additionnels (conseils, définitions…)
   enabled(): boolean;         // false si dépend d'une clé absente ET pas d'autre source
 }
+
+interface PoiLayer {
+  id: string;
+  label: string;
+  icon: string;               // nom d'icône lucide
+  color: string;              // token de couleur
+  source: PoiSource;          // `requiresEnv` : sans la clé, la couche n'est pas proposée
+  render?: 'pins' | 'heatmap' | 'fill';  // défaut 'pins'
+  weightProp?: string;        // 'heatmap' : clé de Poi.props portant l'intensité
+}
+// Un Poi porte lat/lng (ponctuel) et, pour les couches 'fill', une `geometry` + `severity`.
 ```
 
 **Le verdict de la home porte sur « maintenant, ici ».** Le beacon, le compteur
@@ -222,6 +233,16 @@ bandeau. `national` = pas localisé (rappel produit) ; `forecast` = pas encore l
 annoncé, `startedAt` porte alors l'échéance). Une source qui n'est ni l'un ni l'autre allume
 le beacon — c'est le défaut, et il doit rester réservé à ce qui se produit réellement (§1,
 principes 1 et 3).
+
+**Couches de module** : une couche est **toujours désactivable** et par défaut éteinte. Trois
+rendus. `pins` = des épingles cliquables, une par POI : pour de l'information ponctuelle
+(une borne, une caserne). `heatmap` = une nappe de densité (ex. détections FIRMS brutes).
+`fill` = des zones colorées par `Poi.severity` (ex. départements en vigilance, périmètres de
+feux EFFIS). `heatmap` et `fill` sont du **contexte visuel** — ni clic ni libellé, jamais une
+alerte. Une même donnée peut avoir deux représentations : l'incident ponctuel (l'alerte, qui
+peut allumer le beacon) et la couche (le contexte, qui ne le fait jamais) — c'est le cas de la
+Vigilance (points + zones) et de FIRMS (foyers + nappe). Une couche dont la donnée pourrait se
+lire comme une alerte doit passer par une source d'incidents, pas par une couche.
 
 **Ajouter un module** = créer `src/core/modules/<slug>.ts`, l'enregistrer dans
 `registry.ts`. Rien d'autre à toucher : API et UI le prennent en compte automatiquement.

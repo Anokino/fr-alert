@@ -44,13 +44,27 @@ export interface Incident {
   props?: Record<string, unknown>;
 }
 
-/** Un point d'intérêt contextuel (borne incendie, caserne, station…). */
+/** Géométrie surfacique (GeoJSON), pour les couches `render: "fill"`. */
+export type AreaGeometry =
+  | { type: "Polygon"; coordinates: number[][][] }
+  | { type: "MultiPolygon"; coordinates: number[][][][] };
+
+/**
+ * Un élément de couche contextuelle. Ponctuel par défaut (borne, caserne, station).
+ * Peut aussi porter une **zone** (`geometry`) colorée par `severity` — même pipeline, un
+ * autre rendu (cf. `PoiLayer.render`). `lat`/`lng` reste renseigné (point représentatif de
+ * la zone) pour le tri, les popups et le repli si la géométrie manque.
+ */
 export interface Poi {
   id: string;
   layerId: string;
   label: string;
   lat: number;
   lng: number;
+  /** Zone à colorer (couches `fill`). Absente = élément ponctuel. */
+  geometry?: AreaGeometry;
+  /** Gravité de la zone, pour la couleur du remplissage (couches `fill`). */
+  severity?: Severity;
   props?: Record<string, unknown>;
 }
 
@@ -86,8 +100,13 @@ export interface PoiSource {
   label: string;
   attribution: string;
   ttlSeconds: number;
+  /** Nom de la variable d'env requise (clé). Si absente, la couche n'est pas proposée. */
+  requiresEnv?: string;
   fetch(ctx: FetchContext): Promise<Poi[]>;
 }
+
+/** Comment une couche se dessine sur la carte. */
+export type PoiRender = "pins" | "heatmap" | "fill";
 
 export interface PoiLayer {
   id: string;
@@ -97,6 +116,20 @@ export interface PoiLayer {
   /** token de couleur (var CSS) */
   color: string;
   source: PoiSource;
+  /**
+   * Rendu de la couche. `pins` par défaut : des épingles cliquables, une par POI.
+   * `heatmap` : une nappe de densité, pour une donnée trop dense ou trop bruitée pour être
+   * lue point par point (ex. les détections satellite brutes de FIRMS). `fill` : des zones
+   * colorées par `Poi.severity` (ex. départements en vigilance, périmètres de feux). Ni
+   * `heatmap` ni `fill` ne sont cliquables ou libellés — c'est du contexte visuel, pas de
+   * l'information ponctuelle.
+   */
+  render?: PoiRender;
+  /**
+   * `heatmap` uniquement : clé de `Poi.props` portant l'intensité du point (nombre).
+   * Absente → tous les points pèsent pareil (densité pure).
+   */
+  weightProp?: string;
 }
 
 /** Bloc d'information contextuelle affiché dans l'espace d'un module. */
@@ -128,7 +161,14 @@ export interface ModuleMeta {
   tagline: string;
   icon: string;
   accent: string;
-  poiLayers: { id: string; label: string; icon: string; color: string }[];
+  poiLayers: {
+    id: string;
+    label: string;
+    icon: string;
+    color: string;
+    render: PoiRender;
+    weightProp?: string;
+  }[];
   contextPanels: ContextPanel[];
   /** Sources actives (clé présente le cas échéant). */
   activeSources: { id: string; label: string; attribution: string }[];

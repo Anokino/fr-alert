@@ -1,6 +1,9 @@
 import { makeCitizenSource } from "../sources/citizen";
 import { hydroStationPoi } from "../sources/hubeau-hydro";
-import { makeMeteoFranceVigilance } from "../sources/meteofrance-vigilance";
+import {
+  makeMeteoFranceVigilance,
+  makeVigilanceAreaSource,
+} from "../sources/meteofrance-vigilance";
 import { townhallPoi } from "../sources/overpass";
 import { vigicruesSource } from "../sources/vigicrues";
 import type { IncidentModule } from "../types";
@@ -17,6 +20,14 @@ export const floodModule: IncidentModule = {
     makeCitizenSource("flood"),
   ],
   poiLayers: [
+    {
+      id: "vigilance-zones-flood",
+      label: "Zones de vigilance",
+      icon: "map",
+      color: "var(--m-flood)",
+      source: makeVigilanceAreaSource("flood"),
+      render: "fill",
+    },
     {
       id: "hydro-station",
       label: "Stations hydro",

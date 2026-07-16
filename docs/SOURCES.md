@@ -52,6 +52,25 @@ Statut vérifié le **2026-07-15**. `✅` = testé et fonctionnel, `⚠️` = à
 ### geo.api.gouv.fr ✅
 - `communes?lat=..&lon=..&fields=nom,code,centre,codesPostaux` pour reverse-geocode.
 - `communes?code=..&fields=centre` pour centroïde.
+- ⚠️ `?geometry=contour&format=geojson` **ne renvoie pas** la géométrie des départements
+  (juste les métadonnées) — d'où le recours à `france-geojson` ci-dessous pour les contours.
+
+### Contours départementaux ✅ (keyless) → couches `fill`
+- Fichier unique **simplifié** : `raw.githubusercontent.com/gregoiredavid/france-geojson/
+  master/departements-version-simplifiee.geojson` (555 KB, 96 départements dont `2A`/`2B`).
+- Frontières administratives statiques → chargées une fois, cache 24 h (`core/departements.ts`).
+- Propriété `code` = code département, **clé de jointure** directe avec les niveaux Vigilance.
+- On ne renvoie au client que les contours des départements **concernés et visibles** (jamais
+  les 96), via une bbox pré-calculée par département (`bboxIntersects`).
+- ⚠️ Dépendance à `raw.githubusercontent.com` → self-host à terme (cf. `docs/ROADMAP.md`).
+
+### EFFIS / Copernicus 🔴 (périmètres de feux — **en panne au 2026-07-16**)
+- WFS `ies-ows.jrc.ec.europa.eu/effis`. Couche cible : **`ms:ercc.ba`** (Burnt Areas =
+  périmètres polygonaux, ce que Fireguard affiche) ; hotspots en `ms:ercc.hs_24hrs_point`.
+- **Panne serveur** : toutes les couches renvoient `msOracleSpatialLayerOpen(): Cannot create
+  OCI Handlers. Connection failure` (WMS compris) ; le serveur alt
+  `maps.effis.emergency.copernicus.eu` timeout. Schéma des périmètres **non vérifié** → à
+  sonder au retour, ne pas coder à l'aveugle. Détail et usage (filtre hotspots) dans ROADMAP.
 
 ### Vigicrues ✅
 - **Piège** : `/services/1/InfoVigiCru.jsonld/` répond **404**. La forme qui fonctionne est
@@ -134,8 +153,10 @@ Statut vérifié le **2026-07-15**. `✅` = testé et fonctionnel, `⚠️` = à
 - La gravité doit venir de la **puissance**, pas de la confiance : 89 % des détections sont
   `confidence=n`, donc un mapping basé sur la confiance rend presque tout orange (~180
   incidents orange/jour).
-- Les ~2200 détections brutes écartées alimenteront la **carte thermique** du module
-  incendies (cf. `docs/ROADMAP.md`).
+- ✅ Les détections brutes écartées par le regroupement alimentent la **carte thermique** du
+  module incendies (`firmsHeatPoi`, couche `render: "heatmap"`, 420 points/24 h sur la
+  France contre 42 foyers). Trop bruitées pour alerter, exactement ce qu'il faut pour
+  visualiser. Module incendies uniquement, couche désactivable, éteinte par défaut.
 
 ### Portail API Météo-France 🔑 (3 APIs, **un seul token**)
 
@@ -192,6 +213,11 @@ Descriptif technique officiel (PDF) : `data.gouv.fr/api/1/datasets/r/85a64f7e-8b
     (Non utilisé aujourd'hui : la carte suffit.)
 - Diffusion : au moins 2×/jour (6h et 16h locales), et plus souvent si la situation l'exige.
   TTL 30 min.
+- **Deux représentations de la même donnée** (comme foyers vs nappe pour FIRMS) :
+  - *Incidents ponctuels* (`makeMeteoFranceVigilance`) — l'alerte, au point de l'utilisateur.
+  - *Zones* (`makeVigilanceAreaSource`, couche `fill`) — contexte visuel : colore les
+    départements sur la carte du module. Couleur = max des phénomènes **du module** par
+    département (jointure code ↔ contour). Ne remonte pas d'incident, n'allume pas le beacon.
 
 #### Météo des forêts ✅ → module `weather` (**pas** `fire`)
 Vérifié en direct le 2026-07-16 ; sortie **recoupée département par département** contre le

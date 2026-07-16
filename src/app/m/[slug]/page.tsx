@@ -11,6 +11,7 @@ import { fetchModule, fetchPois } from "@/lib/api-client";
 import type { ContextPanel, Incident, ModuleMeta, Poi } from "@/core/types";
 import { Icon } from "@/components/Icon";
 import { IncidentCard } from "@/components/IncidentCard";
+import { RadiusSelector, zoomForRadius } from "@/components/RadiusSelector";
 import { cn } from "@/lib/utils";
 
 const MapView = dynamic(
@@ -23,7 +24,7 @@ const PANEL_ICON = { advice: Lightbulb, info: Info, definition: BookOpen } as co
 export default function ModulePage() {
   const slug = String(useParams().slug);
   const { position } = useGeolocation(true);
-  const [radius] = useState(30);
+  const [radius, setRadius] = useState(25);
   const [data, setData] = useState<{ module: ModuleMeta; incidents: Incident[] } | null>(null);
   const [activeLayers, setActiveLayers] = useState<string[]>([]);
   const [pois, setPois] = useState<Poi[]>([]);
@@ -108,9 +109,14 @@ export default function ModulePage() {
         </Link>
       </header>
 
+      {/* Rayon d'observation */}
+      <div className="mt-5">
+        <RadiusSelector value={radius} onChange={setRadius} />
+      </div>
+
       {/* Couches POI */}
       {mod && mod.poiLayers.length > 0 && (
-        <div className="mt-5 flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">
             Afficher :
           </span>
@@ -142,9 +148,10 @@ export default function ModulePage() {
           {position && (
             <MapView
               center={position}
-              zoom={10}
+              zoom={zoomForRadius(radius)}
               incidents={local}
               pois={pois}
+              poiLayers={mod?.poiLayers}
               className="size-full"
             />
           )}

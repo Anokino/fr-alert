@@ -76,15 +76,69 @@ par distance.
 
 ## Couches de module & contexte enrichi (chantier v2, décidé le 2026-07-16)
 
-- [ ] **Généraliser `poiLayers` en couches de module** avec un mode de rendu
-      (`pins` | `heatmap` | …). Aujourd'hui une couche = des `Poi[]` en épingles ; il faut
-      pouvoir porter d'autres représentations. Toutes les couches restent **désactivables**,
-      et le grand public reste la cible (pas de jargon, pas de surcharge).
-- [ ] **Carte thermique FIRMS** — couche `heatmap` MapLibre (type natif, aucune dépendance)
-      alimentée par les **détections brutes** que le regroupement écarte (~2200 sur 5 j pour
-      la France, contre 350 foyers). Trop bruitées pour alerter, parfaites pour visualiser.
-      ⚠️ **Module incendies uniquement** — ne pas surcharger la carte de la home.
+- [x] **`poiLayers` généralisé en couches de module** ✅ — `render: 'pins' | 'heatmap' |
+      'fill'` + `weightProp`, et `requiresEnv` sur `PoiSource` (une couche dont la clé manque
+      n'est plus proposée du tout, au lieu d'offrir un interrupteur mort). Un `Poi` peut
+      porter une `geometry` + `severity` (couches `fill`).
+- [x] **Carte thermique FIRMS** ✅ vérifiée en direct le 2026-07-16 — couche `heatmap`
+      MapLibre native (aucune dépendance ajoutée) alimentée par les **détections brutes**
+      que le regroupement écarte (420 points/24 h pour la France, contre 42 foyers). Trop
+      bruitées pour alerter, parfaites pour visualiser. **Module incendies uniquement** —
+      la carte de la home reste inchangée.
+- [x] **Zones de vigilance** ✅ vérifiées en direct le 2026-07-16 (épisode caniculaire, ~90
+      départements colorés) — couche `fill` MapLibre native colorant les départements selon
+      leur niveau de vigilance, comme la carte officielle Météo-France. Dans les modules
+      `weather` et `flood` (contexte visuel, désactivable, éteinte par défaut). Contours
+      départementaux simplifiés (france-geojson, cache 24 h), joints par code aux niveaux
+      Vigilance ; seuls les départements concernés **et visibles** sont envoyés au client.
+      Couleur du département = max des phénomènes **du module** (cohérent avec les incidents).
+- [x] **Sélecteur de rayon partagé** (`RadiusSelector`) — la page module était figée à 30 km,
+      ce qui rendait la nappe invisible pour la plupart des utilisateurs.
+- [ ] **Périmètres de feux EFFIS** (module incendies) + **filtre hotspots contextuels** —
+      voir la section EFFIS ci-dessous. **Bloqué** : serveur EFFIS en panne au 2026-07-16.
 - [ ] Décliner l'idée aux autres modules (contexte utile, désactivable, grand public).
+- [ ] Envisager de charger nappe et zones à l'échelle nationale plutôt que sur la bbox : à
+      zoom large, changer de rayon refait un aller-retour réseau pour la même donnée.
+- [ ] **Self-host du GeoJSON des contours départementaux** (555 KB, statique) pour supprimer
+      la dépendance à `raw.githubusercontent.com` — même raison que les polices (voir plus bas).
+
+## Périmètres de feux EFFIS + filtre hotspots contextuels (chantier, décidé le 2026-07-16)
+
+Idée de l'utilisateur, inspirée de Fireguard : afficher les **périmètres de zones brûlées
+EFFIS** (Copernicus) dans le module incendies (couche `fill`, l'archi est prête), ET s'en
+servir comme **validateur contextuel** pour les hotspots FIRMS.
+
+- [ ] **Couche périmètres EFFIS** (`render: "fill"`, module incendies uniquement).
+- [ ] **Filtre contextuel des hotspots** : à l'intérieur d'un périmètre EFFIS connu, on sait
+      qu'un point chaud n'est *pas* une source industrielle → **abaisser le seuil** d'émission
+      FIRMS pour les détections qui tombent dans un périmètre (point-in-polygon), tout en
+      gardant un plancher (« sauf vraiment trop bas »). C'est de la **priorisation
+      déterministe contextuelle** — même esprit que le score d'importance. Nécessite un vrai
+      test point-dans-polygone (ray casting), en plus de `bboxIntersects` déjà présent.
+
+> ⚠️ **Bloqué au 2026-07-16 : EFFIS est en panne serveur.** Le WFS `ies-ows.jrc.ec.europa.eu`
+> renvoie une erreur Oracle (`Cannot create OCI Handlers. Connection failure`) sur **toutes**
+> ses couches, WMS compris ; le serveur alternatif `maps.effis.emergency.copernicus.eu`
+> timeout. Impossible de vérifier le schéma des périmètres ni de tester le filtre → **pas de
+> code à l'aveugle**, on branche quand le service répond. Pistes vérifiées : couche
+> **`ms:ercc.ba`** (Burnt Areas = polygones) via `?service=WFS&request=GetFeature&
+> typeName=ms:ercc.ba&outputFormat=application/json` ; hotspots en points via
+> `ms:ercc.hs_24hrs_point`. Re-sonder le schéma exact et l'ordre bbox WFS 2.0 au retour.
+
+## Veille & statuts d'événements — crawler (chantier v2, décidé le 2026-07-16)
+
+Suivre l'**évolution** d'un événement, pas seulement sa détection. Un crawler interroge
+périodiquement des sources d'information (préfectures, presse locale, pompiers, communiqués
+officiels…) sur les catastrophes en cours et attache à chaque incident une **chronologie de
+statuts** : un feu est-il en cours / fixé / éteint, un séisme a-t-il fait des dégâts, y a-t-il
+des consignes de confinement pour un dégagement toxique, etc.
+
+- [ ] Modéliser une **timeline de mises à jour** rattachée à un incident (statut + horodatage
+      + source), affichée dans le détail de l'événement.
+- [ ] Crawler périodique + sources à cadrer. Le **tri/résumé** des infos rejoint le chantier
+      priorisation ; l'extraction depuis du **texte libre** (communiqués, articles) est le
+      terrain légitime d'un LLM — le statut affiché, lui, doit rester sourcé et daté.
+- [ ] Servira aussi au traitement des signalements citoyens (recoupement avec l'officiel).
 
 ## Reste à faire / v2+
 - [ ] Finaliser le mapping Météo-France Vigilance (avec un token)
@@ -98,6 +152,6 @@ par distance.
       Ressources : `/liste-massifs`, `/massif/BRA`. ⚠️ **XML**, seule source non-JSON du
       projet → prévoir un parser. Ce module sera le test grandeur nature du « ajouter un
       module = ajouter un fichier ».
-- [ ] EFFIS surfaces brûlées, GDACS alertes globales, Atmo indices détaillés
+- [ ] GDACS alertes globales, Atmo indices détaillés (EFFIS a sa section dédiée ci-dessus)
 - [ ] Cache Redis multi-instances ; historique & tendances par zone
 - [ ] Polices : self-host des .woff2 pour supprimer la dépendance réseau à gstatic
