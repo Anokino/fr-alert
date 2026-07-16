@@ -18,7 +18,18 @@ const MapView = dynamic(
   { ssr: false, loading: () => <div className="size-full animate-pulse bg-surface-2" /> },
 );
 
-const RADII = [10, 25, 50];
+const RADII = [10, 25, 50, 100, 200, 500];
+
+/** Zoom cadrant approximativement le rayon demandé. */
+function zoomForRadius(km: number): number {
+  if (km <= 10) return 11;
+  if (km <= 25) return 10;
+  if (km <= 50) return 9;
+  if (km <= 100) return 8;
+  if (km <= 200) return 7;
+  if (km <= 500) return 6;
+  return 5;
+}
 
 export default function HomePage() {
   const { position, status, usingFallback, request } = useGeolocation(true);
@@ -154,7 +165,7 @@ export default function HomePage() {
           {position && (
             <MapView
               center={position}
-              zoom={radius <= 10 ? 11 : radius <= 25 ? 10 : 9}
+              zoom={zoomForRadius(radius)}
               incidents={local}
               className="size-full"
             />

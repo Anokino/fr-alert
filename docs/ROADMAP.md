@@ -24,7 +24,13 @@
       tronçon, keyless. Flux `.geojson` (le `.jsonld` de la doc est mort). Mapping des
       niveaux testé sur fixture (tout est vert en juillet).
 - [x] Citizen (signalements) ✅ round-trip testé
-- [x] FIRMS (clé) — adaptateur prêt, s'active avec FIRMS_MAP_KEY
+- [x] **NASA FIRMS** ✅ réécrit et vérifié en direct le 2026-07-16 (42 foyers sur la France).
+      **Adaptateur auto-réparant** : aucun satellite en dur — il demande à `data_availability`
+      quels flux sont à jour et utilise tous les vivants ; si aucun ne l'est, `isStale` le
+      signale. Motif : `VIIRS_SNPP_NRT`, que l'ancien code ciblait en dur, est mort le
+      2026-07-10 en renvoyant des CSV vides = « aucun feu en France », en silence.
+      Regroupement des pixels en foyers (lien 1,5 km VIIRS / 3 km si MODIS), FRP **max** et
+      jamais somme, seuil 3,5 MW, gravité par puissance et non par confiance.
 - [x] **Météo-France Vigilance** ✅ vérifié en direct le 2026-07-15 sur un épisode
       caniculaire réel (69 dép. en orange) — sortie recoupée département par département
       contre la donnée brute MF, concordance totale. Alimente `weather` (7 phénomènes) et
@@ -40,6 +46,45 @@
 
 ## Modules
 - [x] fire  [x] flood  [x] water  [x] air  [x] quake  [x] weather  [x] health
+
+## Priorisation & suggestions contextuelles (chantier v2, décidé le 2026-07-16)
+
+Objectif : quelqu'un qui arrive sur le site à l'instant T doit trouver **immédiatement** ce
+pour quoi il est venu. S'il y a un gros feu en région parisienne, c'est très probablement
+la raison de sa visite — l'app doit le mettre en avant, pas le noyer dans une liste triée
+par distance.
+
+- [ ] **Score d'importance déterministe** (pas d'IA — voir la note ci-dessous). Ordonne et
+      épingle les alertes à partir de signaux explicites : gravité, ampleur (puissance d'un
+      feu, nombre de départements concernés, périmètre d'un rappel), population exposée,
+      proximité, fraîcheur. Remplace le tri par distance seule de la home.
+      Cas d'école : le rappel des airbags Takata doit primer sur la contamination d'un petit
+      lot de camembert — ça se calcule (périmètre national × risque vital), sans modèle.
+- [ ] **Épinglage automatique** des alertes exceptionnelles au-dessus de la ligne de flottaison.
+- [ ] **Suggestions contextuelles par module** : proposer une couche pertinente selon la
+      situation et l'intérêt de l'utilisateur. Ex. vigilance orages en cours → proposer les
+      impacts de foudre (Météociel / Météo-France / autre). Règles explicites par module.
+- [ ] **Traitement des signalements citoyens** (dédup, regroupement, cohérence avec les
+      sources officielles) — le seul endroit où un LLM est vraiment pertinent (texte libre).
+
+> **Note d'architecture — déterministe d'abord.** Une fonction de score explicite est
+> testable, instantanée, gratuite et **auditable**. Dans une app de sécurité civile, si
+> l'app relègue une alerte, on doit pouvoir expliquer pourquoi ; « le modèle en a décidé
+> ainsi » n'est pas une réponse acceptable. Réserver le LLM à ce que l'algo ne sait pas
+> faire : comprendre du **texte libre** (signalements, libellés RappelConso), pas arbitrer
+> l'importance.
+
+## Couches de module & contexte enrichi (chantier v2, décidé le 2026-07-16)
+
+- [ ] **Généraliser `poiLayers` en couches de module** avec un mode de rendu
+      (`pins` | `heatmap` | …). Aujourd'hui une couche = des `Poi[]` en épingles ; il faut
+      pouvoir porter d'autres représentations. Toutes les couches restent **désactivables**,
+      et le grand public reste la cible (pas de jargon, pas de surcharge).
+- [ ] **Carte thermique FIRMS** — couche `heatmap` MapLibre (type natif, aucune dépendance)
+      alimentée par les **détections brutes** que le regroupement écarte (~2200 sur 5 j pour
+      la France, contre 350 foyers). Trop bruitées pour alerter, parfaites pour visualiser.
+      ⚠️ **Module incendies uniquement** — ne pas surcharger la carte de la home.
+- [ ] Décliner l'idée aux autres modules (contexte utile, désactivable, grand public).
 
 ## Reste à faire / v2+
 - [ ] Finaliser le mapping Météo-France Vigilance (avec un token)

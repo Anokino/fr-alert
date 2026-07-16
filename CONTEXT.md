@@ -63,6 +63,12 @@ proprement si absente.
 - Notifications push mobile (l'API expose déjà les données géolocalisées nécessaires).
 - Comptes utilisateurs / modération avancée des signalements.
 - Historique long terme / analytics.
+- **Priorisation des alertes** (score d'importance, épinglage, suggestions contextuelles)
+  et **couches de module enrichies** (carte thermique…). Deux chantiers v2 décidés le
+  2026-07-16 : voir `docs/ROADMAP.md`. Ils prolongent le principe n°1 (« réponse d'abord »)
+  — arriver sur le site pendant un gros feu doit donner ce feu, pas une liste triée par
+  distance. **Déterministe d'abord** : le score doit rester explicable, le LLM est réservé
+  au texte libre (signalements).
 
 ---
 

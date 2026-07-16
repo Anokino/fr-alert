@@ -164,7 +164,11 @@ select {
 .maplibregl-ctrl-attrib {
   font-size: 10px;
 }
-.maplibregl-popup-content {
+/* Sélecteurs volontairement plus spécifiques que ceux de `maplibre-gl.css` : cette feuille
+   est importée par le composant carte, donc chargée APRÈS globals.css — une règle de même
+   poids (`.maplibregl-popup-content`) s'y fait écraser. Le fond restait blanc sous un texte
+   quasi blanc : les popups d'incidents étaient illisibles. */
+.maplibregl-popup .maplibregl-popup-content {
   background: var(--surface-2);
   color: var(--foreground);
   border: 1px solid var(--border);
@@ -172,7 +176,7 @@ select {
   padding: 10px 12px;
   box-shadow: 0 8px 30px rgb(0 0 0 / 0.4);
 }
-.maplibregl-popup-close-button {
+.maplibregl-popup .maplibregl-popup-close-button {
   color: var(--muted-foreground);
   font-size: 16px;
   padding: 2px 6px;

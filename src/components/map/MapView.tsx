@@ -122,12 +122,14 @@ export function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Recentre quand le centre change significativement.
+  // Recadre quand le centre OU le zoom demandé change. `zoom` n'était appliqué qu'à
+  // l'init : changer le rayon recentrait la carte sans jamais l'ajuster, et la zone
+  // affichée ne correspondait plus au rayon annoncé.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.easeTo({ center: [center.lng, center.lat], duration: 600 });
-  }, [center.lat, center.lng]);
+    map.easeTo({ center: [center.lng, center.lat], zoom, duration: 600 });
+  }, [center.lat, center.lng, zoom]);
 
   // Met à jour les marqueurs incidents + POIs.
   useEffect(() => {

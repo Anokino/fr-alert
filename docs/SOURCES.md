@@ -83,10 +83,59 @@ Statut vérifié le **2026-07-15**. `✅` = testé et fonctionnel, `⚠️` = à
 - Les réponses paginées renvoient **`206 Partial Content`** — c'est un succès (`res.ok`).
 
 ### NASA FIRMS 🔑
-- Obtenir une MAP_KEY gratuite : https://firms.modaps.eosdis.nasa.gov/api/map_key/.
-- CSV `area/csv/{KEY}/VIIRS_SNPP_NRT/{minLng,minLat,maxLng,maxLat}/1` (1 jour).
-- Colonnes : `latitude,longitude,bright_ti4,acq_date,acq_time,confidence,frp`.
-- Sévérité par FRP/confidence.
+- MAP_KEY gratuite : https://firms.modaps.eosdis.nasa.gov/api/map_key/. Quota : 5000
+  transactions / 10 min (`mapserver/mapkey_status/?MAP_KEY=…` pour le vérifier).
+- `area/csv/{KEY}/{SOURCE}/{minLng,minLat,maxLng,maxLat}/{jours}` → CSV. Colonnes :
+  `latitude,longitude,bright_ti4,scan,track,acq_date,acq_time,satellite,instrument,
+  confidence,version,bright_ti5,frp,daynight`.
+- ⚠️ **`day_range` plafonne à 5** (le message d'erreur dit `[1..5]`), et `1` = « aujourd'hui »
+  au sens calendaire : à 00h10 ça ne couvre que 10 minutes. Utiliser ≥ 2 puis filtrer sur
+  l'horodatage, sinon la source est vide toutes les nuits.
+- ⚠️ **Ne jamais coder un satellite en dur.** Vérifié le 2026-07-16 :
+  `VIIRS_SNPP_NRT` s'arrête au **2026-07-10** et renvoie des **CSV vides** — 0 détection
+  même en Afrique centrale (contrôle : NOAA-20 → 72 565 sur la même zone). Un CSV vide est
+  une réponse *valide* : la source répondait `ok=true, count=0`, soit « aucun feu en
+  France », indéfiniment et sans bruit.
+  → Interroger `api/data_availability/csv/{KEY}/ALL` (donne `min_date`/`max_date` par flux),
+  **utiliser tous les capteurs vivants** et marquer les autres via `isStale` /
+  `meta.sources[].stale`. Quand un satellite revient, il est repris sans toucher au code.
+- **FIRMS détecte des anomalies thermiques, pas des incendies.** Sur la France (5 j,
+  NOAA-20+21) : 2205 détections, **FRP médiane 3 MW** — usines, torchères, brûlages. Un vrai
+  feu, c'est des dizaines à des centaines de MW. Le titre affiché doit rester « foyer
+  thermique détecté », jamais « incendie ».
+- ⚠️ **Un feu = plusieurs pixels, et VIIRS réplique la FRP du foyer sur chacun.** Vérifié :
+  437 groupes de pixels partagent une FRP identique au même instant, écart médian 0,53 km
+  (= pixels adjacents à 375 m). **Cumuler serait faux** (4 × 203 MW pour un feu de 203) →
+  regrouper spatialement et prendre le **max**. Une FRP identique peut aussi être une
+  coïncidence à 1000 km : le regroupement doit être spatial, pas basé sur la FRP.
+- ⚠️ **Le rayon de lien dépend de la résolution des capteurs.** MODIS a des pixels d'1 km et
+  une géolocalisation grossière ; VIIRS 375 m. Un même feu apparaît décalé de 2-3 km entre
+  les deux. Constaté : le feu de Navarre, vu à 952 MW par VIIRS (91 pixels) et à 1093 MW par
+  MODIS **2,9 km plus loin** — un lien serré uniforme le comptait deux fois.
+  → lien **1,5 km entre pixels VIIRS**, **3 km dès qu'un pixel MODIS est impliqué**.
+  Résultat mesuré : 44 → 42 foyers, **0 doublon restant**, et les 8 foyers vus par MODIS seul
+  (de vrais feux manqués par VIIRS, passages à d'autres heures) sont conservés.
+- ⚠️ **Filtrer par ancienneté APRÈS le regroupement, jamais avant.** Retirer les détections
+  anciennes du nuage de points casse les chaînes et fait éclater un grand incendie en
+  plusieurs foyers. C'est ce qui coupait le feu de Navarre en deux. Regrouper sur toute la
+  fenêtre, puis écarter les groupes sans détection récente (< 24 h).
+- **Calibration retenue** (mesurée sur données réelles) : lien 1,5 / 3 km selon capteurs, FRP
+  **max** des détections récentes, seuil d'émission **3,5 MW** (choix de l'utilisateur, côté
+  prudence : mieux vaut une torchère de trop qu'un départ de feu manqué).
+  → **42 foyers sur la France** (24 h, 3 capteurs), dont 2 rouges et 3 oranges — soit ~0 dans
+  un rayon de 25 km autour d'un utilisateur la plupart du temps. Seuils de gravité :
+  < 30 MW jaune, 30-100 orange, ≥ 100 rouge.
+  Repères si le seuil doit bouger (mesuré sur 5 j) : 5 MW → 27 foyers/j · 10 MW → 14/j ·
+  30 MW → 3/j · 100 MW → 1,2/j. Étendue p90 d'un foyer = 1,6 km (pas de chaînage aberrant ;
+  les rares foyers de ~9 km sont de vrais grands incendies, identiques à 0,75 km de lien).
+- Le regroupement est fait sur une **zone nationale fixe**, pas sur la bbox demandée : sinon
+  deux utilisateurs verraient des foyers différents pour le même feu et les identifiants ne
+  seraient pas stables (ils doivent l'être — futures notifications).
+- La gravité doit venir de la **puissance**, pas de la confiance : 89 % des détections sont
+  `confidence=n`, donc un mapping basé sur la confiance rend presque tout orange (~180
+  incidents orange/jour).
+- Les ~2200 détections brutes écartées alimenteront la **carte thermique** du module
+  incendies (cf. `docs/ROADMAP.md`).
 
 ### Portail API Météo-France 🔑 (3 APIs, **un seul token**)
 

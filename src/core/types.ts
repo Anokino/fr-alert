@@ -69,6 +69,15 @@ export interface IncidentSource {
   /** Nom de la variable d'env requise (clé). Si absente, la source est ignorée. */
   requiresEnv?: string;
   fetch(ctx: FetchContext): Promise<Incident[]>;
+  /**
+   * Optionnel : signale que le flux amont est **périmé** alors même que la requête réussit.
+   * Certaines APIs répondent 200 avec un contenu vide quand leur alimentation est morte —
+   * indiscernable d'un « rien à signaler ». Une source qui sait dater sa donnée l'implémente
+   * pour que `meta.sources[].stale` le dise au lieu de laisser croire au calme plat.
+   * Vécu : le satellite VIIRS Suomi-NPP a cessé d'alimenter FIRMS le 2026-07-10 en renvoyant
+   * des CSV vides.
+   */
+  isStale?(ctx: FetchContext): Promise<boolean>;
 }
 
 /** Contrat d'une source de POIs. */
@@ -130,6 +139,8 @@ export interface SourceStatus {
   label: string;
   ok: boolean;
   count: number;
+  /** La requête a réussi mais le flux amont est périmé (cf. `IncidentSource.isStale`). */
+  stale?: boolean;
 }
 
 export interface IncidentsResponse {

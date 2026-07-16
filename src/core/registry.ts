@@ -69,12 +69,22 @@ async function runSource(
   }
   try {
     const incidents = await source.fetch(ctx);
+    // Une source peut réussir tout en servant de la donnée morte : on le demande plutôt que
+    // de laisser un `count: 0` passer pour « rien à signaler ». Le contrôle ne doit jamais
+    // faire échouer la source elle-même.
+    let stale = false;
+    try {
+      stale = (await source.isStale?.(ctx)) ?? false;
+    } catch (err) {
+      console.error(`[source ${source.id}] contrôle de fraîcheur`, err);
+    }
     return {
       status: {
         id: source.id,
         label: source.label,
         ok: true,
         count: incidents.length,
+        ...(stale ? { stale: true } : {}),
       },
       incidents,
     };
