@@ -15,9 +15,13 @@ mobile.
 
 ```bash
 npm install
-npx prisma db push      # crée la base SQLite (dev.db)
+npm run db:push         # crée la base SQLite (dev.db)
 npm run dev             # http://localhost:3000
 ```
+
+> Passer par les scripts npm plutôt que par `npx` : `npm run` utilise le binaire local du
+> projet, là où `npx` peut télécharger une version plus récente et incompatible (vécu en
+> déploiement : Prisma 7 tiré à la place du 6.x du projet, cf. `docs/DEPLOY.md`).
 
 En dev, l'app est **autonome** : elle interroge les APIs amont elle-même, rien d'autre à
 lancer. Pour travailler dans les conditions de la production (données servies depuis
