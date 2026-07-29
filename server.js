@@ -1,14 +1,16 @@
 /**
  * Point de démarrage de l'application web — fichier chargé par **Phusion Passenger**
- * (champ « Fichier de démarrage de l'application » du cPanel : `server.cjs`).
+ * (champ « Fichier de démarrage de l'application » du cPanel : `server.js`).
  *
- * ⚠️ **CommonJS délibérément** (`.cjs`), alors que le reste du projet est en modules ES.
+ * ⚠️ **CommonJS délibérément**, et c'est la raison pour laquelle `package.json` ne déclare
+ * PAS `"type": "module"`. Les rares fichiers qui ont besoin d'ESM portent l'extension `.mjs`.
  *
  * Passenger ne lance pas une commande : il charge ce fichier avec son propre mécanisme, qui
- * suppose du CommonJS. Un point d'entrée en module ES échoue **avant même d'être exécuté** —
- * aucune trace, aucun log, juste « Web application could not be started ». Vécu le
- * 2026-07-29 : la version ESM se chargeait pourtant sans problème via `require()` en Node pur,
- * ce qui rendait le diagnostic trompeur. Ne pas reconvertir ce fichier en ESM.
+ * suppose un `server.js` CommonJS. Un point d'entrée en module ES échoue **avant même d'être
+ * exécuté** — aucune trace, aucun log, juste « Web application could not be started ». Vécu
+ * le 2026-07-29 : la version ESM se chargeait pourtant parfaitement via `require()` en Node
+ * pur, y compris avec un environnement vidé (`env -i`), ce qui rendait tous les tests manuels
+ * verts et le diagnostic trompeur. Ne pas reconvertir ce fichier en ESM, ni le renommer.
  *
  * Trois autres contraintes vérifiées en direct, à ne pas défaire :
  *  1. **Écouter `'passenger'`, pas un port**, quand Passenger est présent : il fournit une
