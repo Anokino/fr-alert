@@ -80,6 +80,24 @@ export interface FetchContext {
   params?: Record<string, string>;
 }
 
+/**
+ * Portée d'une source — décide si le **worker d'ingestion** peut la préparer à l'avance.
+ *
+ * `national` : la donnée amont ne dépend pas de la zone demandée (flux national ou européen
+ * qu'on récupère en entier puis qu'on filtre). Le worker l'exerce sur la France et remplit
+ * l'instantané ; le web n'appelle donc plus l'API amont. C'est le cas de tout ce qui est lent
+ * ou lourd (EFFIS, FIRMS, Vigicrues, contours départementaux).
+ *
+ * `local` (défaut) : la requête amont dépend intrinsèquement du point ou de la bbox
+ * (une mesure d'air à une coordonnée, les POIs OSM d'un rectangle, la commune d'un point).
+ * Pré-calculer toute la France à cette granularité est impraticable → reste à la demande.
+ *
+ * ⚠️ Ne déclarer `national` qu'une source dont le travail coûteux passe par `snapshot()` :
+ * c'est l'instantané qui est mutualisé, pas le résultat final (celui-ci reste filtré par
+ * bbox à chaque requête, donc toujours juste pour l'utilisateur).
+ */
+export type SourceScope = "national" | "local";
+
 /** Contrat d'une source d'incidents. fail-soft : peut throw, capté en amont. */
 export interface IncidentSource {
   id: string;
@@ -88,6 +106,8 @@ export interface IncidentSource {
   ttlSeconds: number;
   /** Nom de la variable d'env requise (clé). Si absente, la source est ignorée. */
   requiresEnv?: string;
+  /** Cf. `SourceScope`. Défaut `local` — une source n'est ingérée que si elle le déclare. */
+  scope?: SourceScope;
   fetch(ctx: FetchContext): Promise<Incident[]>;
   /**
    * Optionnel : signale que le flux amont est **périmé** alors même que la requête réussit.
@@ -108,6 +128,15 @@ export interface PoiSource {
   ttlSeconds: number;
   /** Nom de la variable d'env requise (clé). Si absente, la couche n'est pas proposée. */
   requiresEnv?: string;
+  /** Cf. `SourceScope`. Défaut `local`. */
+  scope?: SourceScope;
+  /**
+   * Jeux de paramètres à pré-ingérer, pour une couche **paramétrable** (`FetchContext.params`).
+   * Chaque entrée produit une entrée d'instantané distincte : sans ça, seul le défaut serait
+   * chaud et choisir une autre valeur dans l'UI retomberait sur un appel amont lent.
+   * Ex. les fenêtres proposées pour les périmètres EFFIS : `[{days:"3"}, {days:"7"}, …]`.
+   */
+  ingestParams?: Record<string, string>[];
   fetch(ctx: FetchContext): Promise<Poi[]>;
 }
 

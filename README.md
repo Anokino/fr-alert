@@ -9,7 +9,7 @@ mobile.
 > **À lire avant de contribuer** : `CONTEXT.md` (vision, contrats, conventions) → puis
 > `ARCHITECTURE.md` (arborescence, décisions). Avant de toucher à une source de données :
 > `docs/SOURCES.md` — chaque API a ses pièges, tous vérifiés en direct et documentés.
-> État d'avancement : `docs/ROADMAP.md`.
+> État d'avancement : `docs/ROADMAP.md`. Mise en ligne : `docs/DEPLOY.md`.
 
 ## Démarrage
 
@@ -18,6 +18,10 @@ npm install
 npx prisma db push      # crée la base SQLite (dev.db)
 npm run dev             # http://localhost:3000
 ```
+
+En dev, l'app est **autonome** : elle interroge les APIs amont elle-même, rien d'autre à
+lancer. Pour travailler dans les conditions de la production (données servies depuis
+l'instantané), voir « Les deux exécutions » ci-dessous.
 
 Aucune clé n'est nécessaire : les sources ouvertes fonctionnent d'emblée. Copiez
 `.env.example` en `.env` pour activer les sources optionnelles :
@@ -28,6 +32,27 @@ Aucune clé n'est nécessaire : les sources ouvertes fonctionnent d'emblée. Cop
 
 Sans clé, les modules concernés **dégradent proprement** (la source est ignorée, les couches
 qui en dépendent ne sont pas proposées).
+
+## Les deux exécutions
+
+Le même dépôt produit deux processus, qui se rejoignent sur la base SQLite :
+
+| | Commande | Rôle |
+|---|---|---|
+| **Web** | `npm start` (`server.js`) | répond aux utilisateurs |
+| **Worker** | `npm run ingest` (cron) | rafraîchit les données nationales |
+
+```bash
+npm run build            # prisma generate + build Next + compilation du worker
+npm run ingest -- --force  # remplit l'instantané tout de suite
+curl localhost:3000/api/health
+```
+
+Les sources déclarées `scope: "national"` (FIRMS, Vigicrues, Vigilance, EFFIS, RappelConso…)
+sont **pré-ingérées** : le web les sert depuis la base au lieu d'appeler les APIs. Les sources
+`local` (qualité de l'air, POIs OSM, eau potable) restent à la demande, autour du point
+demandé. Poser `FA_INGEST=1` bascule le web en mode délégué ; sans cette variable il reste
+autonome. Détail : `ARCHITECTURE.md` § « Deux exécutions », déploiement : `docs/DEPLOY.md`.
 
 ## Sources de données
 
@@ -48,6 +73,7 @@ Détail, endpoints exacts et pièges : `docs/SOURCES.md`.
 | `GET /api/reports?module=fire` · `POST /api/reports` | Signalements citoyens |
 | `GET /api/geo/reverse?lat=…&lng=…` | Commune d'un point (reverse) |
 | `GET /api/geo/search?q=<adresse>` | Recherche d'adresse → coordonnées (forward) |
+| `GET /api/health` | État base + ingestion (fraîcheur par source) — vérification de déploiement |
 
 La zone se donne par `bbox` **ou** par `lat`+`lng`(+`r` en km) : une simple URL suffit à
 décrire les événements d'une zone (utile au mobile et au debug).

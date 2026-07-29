@@ -1,4 +1,5 @@
-import { cached, fetchText } from "../cache";
+import { fetchText } from "../cache";
+import { snapshot } from "../snapshot";
 import { bboxCenter } from "../geo";
 import { reverseCommune } from "../geocode";
 import type { Incident, IncidentSource, Severity } from "../types";
@@ -147,6 +148,8 @@ export const meteoFranceForetsSource: IncidentSource = {
   attribution: "Météo-France",
   ttlSeconds: 60 * 60,
   requiresEnv: "METEOFRANCE_TOKEN",
+  // CSV national des 96 départements → ingérable.
+  scope: "national",
 
   async fetch(ctx): Promise<Incident[]> {
     const center = ctx.center ?? bboxCenter(ctx.bbox);
@@ -158,7 +161,7 @@ export const meteoFranceForetsSource: IncidentSource = {
     if (!dept) return [];
 
     // Flux national → mis en cache une seule fois, indépendamment de la bbox.
-    const rows = await cached("meteofrance-forets:carte", this.ttlSeconds, async () => {
+    const rows = await snapshot("meteofrance-forets:carte", this.ttlSeconds, async () => {
       const token = process.env.METEOFRANCE_TOKEN;
       if (!token) throw new Error("METEOFRANCE_TOKEN absente");
       return parseCsv(await fetchText(CARTE_URL, { headers: { apikey: token } }));

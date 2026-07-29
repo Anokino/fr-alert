@@ -1,4 +1,5 @@
-import { cached, fetchJson } from "../cache";
+import { fetchJson } from "../cache";
+import { snapshot } from "../snapshot";
 import { bboxIntersects, bboxCenter } from "../geo";
 import type { AreaGeometry, BBox, Poi, PoiSource, Severity } from "../types";
 
@@ -99,7 +100,7 @@ async function fetchBurntPerimeters(
   ttlSeconds: number,
 ): Promise<BurntPerimeter[]> {
   const since = sinceIso(days);
-  return cached(`effis-burnt:${days}`, ttlSeconds, async () => {
+  return snapshot(`effis-burnt:${days}`, ttlSeconds, async () => {
     const fc = await fetchJson<{ features: BurntFeature[] }>(
       `${WFS}?service=WFS&version=1.1.0&request=GetFeature` +
         `&typename=ms:modis.ba.poly&outputformat=geojson` +
@@ -148,6 +149,13 @@ export const effisBurntPoi: PoiSource = {
   label: "Zones brûlées (EFFIS)",
   attribution: "EFFIS / Copernicus EMS",
   ttlSeconds: 30 * 60,
+  // Le serveur EFFIS est lent et instable (timeouts fréquents jusqu'à 45 s) : c'est LA source
+  // qu'il faut sortir du chemin utilisateur. Ingérée, elle devient instantanée côté web, et
+  // ses pannes n'affectent plus que la fraîcheur de la couche.
+  scope: "national",
+  // Une entrée d'instantané par fenêtre proposée dans l'UI du module : sans ça, seul le
+  // défaut (3 j) serait chaud et choisir 30 j rejouerait un appel amont de plusieurs Mo.
+  ingestParams: [{ days: "3" }, { days: "7" }, { days: "14" }, { days: "30" }],
 
   async fetch(ctx): Promise<Poi[]> {
     const days = windowDays(ctx);

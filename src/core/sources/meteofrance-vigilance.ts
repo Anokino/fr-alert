@@ -1,4 +1,5 @@
-import { cached, fetchJson } from "../cache";
+import { fetchJson } from "../cache";
+import { snapshot } from "../snapshot";
 import { departementContours } from "../departements";
 import { bboxCenter, bboxIntersects } from "../geo";
 import { reverseCommune } from "../geocode";
@@ -91,7 +92,7 @@ interface CarteVigilance {
 }
 
 function fetchCarte(ttlSeconds: number): Promise<CarteVigilance> {
-  return cached("meteofrance-vigilance:carte", ttlSeconds, () => {
+  return snapshot("meteofrance-vigilance:carte", ttlSeconds, () => {
     const token = process.env.METEOFRANCE_TOKEN;
     if (!token) throw new Error("METEOFRANCE_TOKEN absente");
     return fetchJson<CarteVigilance>(CARTE_URL, { headers: { apikey: token } });
@@ -107,6 +108,10 @@ export function makeMeteoFranceVigilance(
     attribution: "Météo-France",
     ttlSeconds: 30 * 60,
     requiresEnv: "METEOFRANCE_TOKEN",
+    // La carte nationale est ingérable ; le département de l'utilisateur reste résolu à
+    // chaque requête (`reverseCommune`, propre au point) — c'est du calcul local, pas un
+    // appel amont lourd.
+    scope: "national",
 
     async fetch(ctx): Promise<Incident[]> {
       const center = ctx.center ?? bboxCenter(ctx.bbox);
@@ -201,6 +206,8 @@ export function makeVigilanceAreaSource(
     attribution: "Météo-France",
     ttlSeconds: 30 * 60,
     requiresEnv: "METEOFRANCE_TOKEN",
+    // Carte nationale + contours départementaux : les deux sont en instantané.
+    scope: "national",
 
     async fetch(ctx): Promise<Poi[]> {
       const carte = await fetchCarte(this.ttlSeconds);

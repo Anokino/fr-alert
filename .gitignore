@@ -2,10 +2,20 @@ node_modules
 .next
 out
 build
+# Sortie de compilation du worker d'ingestion (recréée par `npm run build`).
+dist
 .env
 .env*.local
 *.db
 *.db-journal
+# SQLite en mode WAL (cf. core/snapshot.ts) crée ces deux fichiers à côté de la base.
+*.db-wal
+*.db-shm
 prisma/dev.db
 .DS_Store
 next-env.d.ts
+tsconfig.tsbuildinfo
+# Verrous et journaux d'ingestion (cron) en environnement local.
+logs
+*.lock
+docs/DEPLOY.md

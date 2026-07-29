@@ -1,4 +1,5 @@
-import { cached, fetchJson } from "./cache";
+import { fetchJson } from "./cache";
+import { snapshot } from "./snapshot";
 import type { AreaGeometry, BBox } from "./types";
 
 /**
@@ -50,7 +51,9 @@ function geometryBBox(geom: AreaGeometry): BBox {
 export async function departementContours(
   ttlSeconds: number,
 ): Promise<DeptContour[]> {
-  return cached("dept-contours", ttlSeconds, async () => {
+  // Instantané : 555 Ko statiques, partagés par toutes les couches `fill`. Le worker les
+  // charge une fois par jour, le web ne touche donc jamais raw.githubusercontent.com.
+  return snapshot("dept-contours", ttlSeconds, async () => {
     const fc = await fetchJson<{ features: DeptFeature[] }>(CONTOURS_URL);
     return (fc.features ?? []).map((f) => ({
       code: f.properties.code,

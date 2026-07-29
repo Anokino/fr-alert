@@ -5,7 +5,7 @@
 > qui doivent rester stables entre les sessions. Toute décision structurante nouvelle se
 > reporte ici.
 
-Dernière mise à jour : 2026-07-16.
+Dernière mise à jour : 2026-07-29.
 
 ---
 
@@ -21,7 +21,8 @@ besoin d'accès externe.
 3. `docs/SOURCES.md` — catalogue des sources externes : endpoints, pièges vérifiés en direct,
    statut. **À lire avant de toucher à une source** (chaque API a ses traquenards documentés).
 4. `docs/ROADMAP.md` — état d'avancement complet : livré / en cours / à faire.
-5. `README.md` — démarrage rapide, table des routes API.
+5. `docs/DEPLOY.md` — mise en ligne (o2switch/cPanel) : les deux exécutions, le cron, les pièges.
+6. `README.md` — démarrage rapide, table des routes API.
 
 **Skills à utiliser** (Claude Code) : pour toute UI, charger **`frontend-design`** (qualité
 visuelle) + **`web-design-guidelines`** (bonnes pratiques web, à lancer sur les fichiers
@@ -114,12 +115,28 @@ proprement si absente.
   shadcn/ui, `cn()` (clsx + tailwind-merge), CVA pour les variantes.
 - **MapLibre GL JS** — carto open-source, **sans clé**, fonds de carte raster libres
   (OSM / Carto). Aucun token propriétaire requis.
-- **Prisma + SQLite** — persistance des **signalements citoyens** (et futures entités).
-  SQLite en dev ; migrable Postgres en prod sans changer le code applicatif.
+- **Prisma + SQLite** — persistance des **signalements citoyens**, de l'**instantané des
+  sources nationales** et de l'**état d'ingestion**. SQLite en dev **et en prod** (choix de
+  simplicité assumé : un fichier, aucun service à provisionner) ; migrable MySQL/Postgres
+  derrière Prisma si le volume l'exige un jour.
 - **Zod** — validation des payloads d'API (entrée signalement, params).
 
 Raisons : un seul déploiement, une seule base de types partagée client/serveur, caching et
 revalidation natifs pour les flux externes, zéro clé obligatoire pour démarrer.
+
+### Deux exécutions, un seul dépôt
+
+Le projet produit **deux processus** à partir du même code (cf. §4 et `docs/DEPLOY.md`) :
+
+| | **Web** | **Worker d'ingestion** |
+|---|---|---|
+| Lancé par | Passenger (`server.js`) | cron (`npm run ingest`) |
+| Rôle | répondre aux utilisateurs | rafraîchir les données nationales |
+| Appelle les APIs amont | **non** (en mode délégué) | oui |
+| Build | `next build` → `.next/` | `tsc` → `dist/` |
+
+Ce n'est **pas** une séparation en deux dépôts ni deux applications : c'est le même registre
+de modules, exercé par deux points d'entrée. Ajouter une source reste « ajouter un fichier ».
 
 ---
 
@@ -134,32 +151,44 @@ connaissent aucun module en dur.
                     ┌─────────────────────────────────────────────┐
    Sources externes │  FIRMS · Hub'Eau · Open-Meteo · EMSC ·       │
    (live, open data)│  RappelConso · Overpass(OSM) · Météo-France  │
-                    └───────────────┬─────────────────────────────┘
-                                    │  adaptateurs (core/sources/*)
-                                    │  → normalisent en Incident / Poi
-                                    ▼
+                    └──────┬──────────────────────────┬───────────┘
+        scope: "national"  │                          │  scope: "local"
+        (flux entiers)     ▼                          │  (propre à un point)
+              ┌───────────────────────┐               │
+              │  WORKER D'INGESTION   │  cron         │
+              │  npm run ingest       │  toutes       │
+              │  (src/worker)         │  les 5 min    │
+              └───────────┬───────────┘               │
+                          │ écrit                     │
+                          ▼                           │
+              ┌───────────────────────┐               │
+              │   SQLite (Prisma)     │               │
+              │  Snapshot · SourceRun │               │
+              │  Report (signalements)│               │
+              └───────────┬───────────┘               │
+                          │ lit                       │  à la demande
+                          ▼                           ▼
    ┌───────────────────────────────────────────────────────────────┐
    │  REGISTRE DE MODULES  (core/registry.ts)                       │
    │  fire · flood · water · air · quake · weather · health         │
    │  chaque module = { meta, sources[], poiLayers[], context }     │
    └───────────────┬───────────────────────────────────────────────┘
-                   │
-     ┌─────────────┴───────────────┐
-     ▼                             ▼
-   API Route Handlers          Base SQLite (Prisma)
-   /api/incidents              signalements citoyens
-   /api/modules[/slug]         (source "citizen" par module)
-   /api/pois
-   /api/reports (GET/POST)
-     │
-     ▼
-   Frontend (RSC + client)
-   home géolocalisée · carte · pages modules · signalement
+                   │  les DEUX exécutions itèrent ce même registre
+                   ▼
+   API Route Handlers  →  Frontend (RSC + client)
+   /api/incidents · /api/modules[/slug] · /api/pois · /api/reports
+   /api/geo/* · /api/health (état de l'ingestion)
 ```
 
-Cache : chaque appel à une source externe passe par un **cache mémoire TTL** (`core/cache.ts`)
-pour absorber la charge et rester rapide. TTL adapté à la fraîcheur de la donnée (séismes 2
-min, air 30 min, eau potable 6 h, POIs 24 h…).
+**Cache à deux étages.** Les données **nationales** (lentes, lourdes, identiques pour tous)
+passent par un **instantané persistant** en base (`core/snapshot.ts`), écrit par le worker et
+lu par le web. Les données **locales** (propres à un point : qualité de l'air, POIs OSM,
+commune) gardent le **cache mémoire TTL** (`core/cache.ts`), qui sert aussi de niveau 1 devant
+l'instantané — relire plusieurs Mo à chaque requête coûterait plus que l'appel réseau évité.
+
+TTL adapté à la fraîcheur de la donnée (séismes 2 min, air 30 min, eau potable 6 h, POIs 24 h…) ;
+c'est **ce même `ttlSeconds` qui pilote la cadence d'ingestion**, donc le cron n'a jamais besoin
+d'être retouché quand on ajoute une source.
 
 Fail-soft : une source qui échoue est *loggée* et renvoie `[]`. Un module reste utilisable
 même si l'une de ses sources est indisponible. L'UI affiche la fraîcheur et les sources en
@@ -207,12 +236,15 @@ interface Poi {
 ### 5.2 Contrat de source (`src/core/types.ts`)
 
 ```ts
+type SourceScope = "national" | "local";   // défaut "local"
+
 interface IncidentSource {
   id: string;                 // "firms", "emsc", "hubeau-water"
   label: string;              // "NASA FIRMS"
   attribution: string;        // mention légale à afficher
-  ttlSeconds: number;         // durée de cache
+  ttlSeconds: number;         // durée de cache ET cadence d'ingestion
   requiresEnv?: string;       // nom de variable d'env si clé requise
+  scope?: SourceScope;        // "national" → pré-ingérée par le worker
   fetch(ctx: FetchContext): Promise<Incident[]>;   // fail-soft: throw autorisé, capté en amont
   isStale?(ctx: FetchContext): Promise<boolean>;   // flux « répond 200 mais mort » → meta.stale
 }
@@ -223,6 +255,8 @@ interface PoiSource {
   attribution: string;
   ttlSeconds: number;
   requiresEnv?: string;       // sans la clé, la couche n'est pas proposée
+  scope?: SourceScope;
+  ingestParams?: Record<string, string>[];  // jeux de params à pré-ingérer (couche réglable)
   fetch(ctx: FetchContext): Promise<Poi[]>;
 }
 
@@ -237,6 +271,22 @@ interface FetchContext {
 `meta.sources[].stale` (posé par le registre via `isStale`) signale un flux qui répond mais
 sert de la donnée morte — un `count: 0` ne doit jamais être pris pour du calme réel sans
 l'avoir vérifié (vécu : satellite FIRMS Suomi-NPP mort renvoyant des CSV vides).
+
+**`scope` décide qui appelle l'API amont.** `national` = la requête amont ne dépend pas de la
+zone demandée (flux national ou européen récupéré en entier puis filtré) : le worker l'ingère
+d'avance et le web n'appelle plus rien. `local` (défaut) = la requête dépend
+intrinsèquement du point ou de la bbox (une mesure d'air à une coordonnée, les POIs OSM d'un
+rectangle) : pré-calculer toute la France à cette granularité est impraticable, ça reste à la
+demande.
+
+Deux règles qui vont ensemble :
+
+- Ne déclarer `national` **que** si le travail coûteux passe par `snapshot()` — c'est
+  l'instantané qui est mutualisé, pas le résultat final. Le filtrage par bbox continue de
+  s'exécuter à chaque requête, donc la réponse reste juste pour l'utilisateur.
+- **L'app doit rester fonctionnelle sans worker.** Sans `FA_INGEST=1`, le web se rabat sur
+  l'appel direct : plus lent, mais autonome. Le mode délégué est un interrupteur, jamais une
+  dépendance dure — c'est ce qui permet de développer et de revenir en arrière sans rien casser.
 
 ### 5.3 Contrat de module (`src/core/types.ts`)
 
@@ -361,6 +411,14 @@ rouge) — vernaculaire authentique de la sécurité civile FR, pas un accent d�
   aveugle. C'est un mensonge sur la fraîcheur de la donnée, donc une violation du principe
   produit n°3 (§1). Deux pannes réelles ont été masquées ainsi (Hub'Eau v1 retirée → 403,
   `DATABASE_URL` absente) ; corrigé le 2026-07-15.
+- **Changer la forme d'une donnée en instantané = incrémenter `SCHEMA_VERSION`**
+  (`core/snapshot.ts`). Le cache mémoire se vidait au redémarrage, ce qui pardonnait les
+  refactors ; l'instantané, lui, **survit au déploiement**. Sans changement de version, le
+  nouveau code désérialiserait indéfiniment l'ancienne forme.
+- **Un `PRAGMA` SQLite se lit avec `$queryRaw`, jamais `$executeRaw`.** `journal_mode` et
+  `busy_timeout` renvoient une ligne, et Prisma rejette un `execute` qui produit un résultat.
+  Vécu le 2026-07-29 : les trois PRAGMA échouaient et le WAL n'était jamais activé — en
+  silence, l'erreur étant capturée. Le worker affiche donc désormais le journal effectif.
 
 ---
 
@@ -391,6 +449,21 @@ EFFIS (seuil abaissé dans un périmètre de feu) ; le champ `stale` pour les fl
   mode / adresse / rayon survivent à la navigation accueil ↔ module. Les couches et la fenêtre
   EFFIS restent locales à la page module.
 
+**Fait le 2026-07-29 (chantier « split web / ingestion », préparation au déploiement)** :
+- **Instantané persistant** (`core/snapshot.ts` + tables `Snapshot`/`SourceRun`) : les données
+  nationales vivent en base, partagées entre les deux exécutions et survivant au recyclage du
+  process web.
+- **Worker d'ingestion** (`src/worker/ingest.ts`, `npm run ingest`) : itère le registre,
+  rafraîchit les sources `scope: "national"` périmées, consigne chaque passage. Aucune source
+  en dur.
+- **`scope` sur les contrats de source** + `ingestParams` pour les couches réglables.
+- **Prêt à déployer** : `server.js` (entrée Passenger), `tsconfig.worker.json` (+ `dist/`),
+  scripts `build`/`ingest`, `GET /api/health`, et `docs/DEPLOY.md` (runbook o2switch).
+- Vérifié en direct : ingestion réelle des 13 unités, FIRMS **33 464 ms → 11 ms**, couches du
+  module feu **45 s → 1 ms**, WAL actif, et une donnée non ingérée remonte bien `ok: false`
+  au lieu d'un faux « rien à signaler ».
+
 **Prochaine étape** : chantiers v2 (voir `docs/ROADMAP.md` §4) — score d'importance
 déterministe, crawler de statuts d'événements, et le **rework du layout du module** (acté :
-rayon + couches + fenêtre + barre d'adresse s'empilent, c'est devenu chargé).
+rayon + couches + fenêtre + barre d'adresse s'empilent, c'est devenu chargé). Les deux
+premiers s'appuient désormais sur le worker, qui est leur foyer naturel.

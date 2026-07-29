@@ -1,5 +1,9 @@
-// France Alert — schéma Prisma (SQLite en dev, migrable Postgres).
-// Persiste les signalements citoyens ; la source `citizen.ts` les projette en Incident[].
+// France Alert — schéma Prisma (SQLite, dev et prod ; migrable MySQL/Postgres).
+// Persiste :
+//  - les signalements citoyens (`Report`) — la source `citizen.ts` les projette en Incident[] ;
+//  - l'instantané des sources nationales (`Snapshot`) et l'état de la dernière ingestion
+//    (`SourceRun`), écrits par le worker (`npm run ingest`) et lus par le web.
+// Voir docs/DEPLOY.md et ARCHITECTURE.md § « Deux exécutions ».
 
 generator client {
   provider = "prisma-client-js"
@@ -8,6 +12,45 @@ generator client {
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
+}
+
+/// Instantané persistant d'une donnée amont nationale (cf. `core/snapshot.ts`).
+/// C'est le point de rendez-vous entre les deux exécutions : le worker écrit, le web lit.
+/// `key` porte une version de schéma (`v1:…`) — un changement de forme de la donnée doit
+/// faire changer cette version, sinon le web désérialiserait l'ancienne forme (déjà vécu
+/// avec le cache mémoire, mais un cache persistant ne s'efface plus au redémarrage).
+model Snapshot {
+  key       String   @id
+  /// Charge utile sérialisée en JSON.
+  value     String
+  /// Durée de fraîcheur annoncée par la source, en secondes (sert au calcul de péremption).
+  ttl       Int
+  /// Taille de `value`, pour surveiller la croissance de la base sans la lire.
+  bytes     Int      @default(0)
+  fetchedAt DateTime @default(now())
+
+  @@index([fetchedAt])
+}
+
+/// Résultat de la dernière ingestion d'une source (ou d'une couche) par le worker.
+/// Alimente la fraîcheur affichée : un `count: 0` sur une ingestion en échec ne doit
+/// jamais passer pour « rien à signaler » (principe produit n°3).
+model SourceRun {
+  /// Identifiant de la source ou de la couche.
+  id      String   @id
+  /// "incident" | "poi".
+  kind    String
+  ok      Boolean
+  count   Int      @default(0)
+  /// Le flux répond mais sert de la donnée morte (cf. `IncidentSource.isStale`).
+  stale   Boolean  @default(false)
+  /// Message d'erreur de la dernière tentative en échec (tronqué).
+  error   String?
+  /// Durée de l'ingestion en millisecondes.
+  ms      Int      @default(0)
+  ranAt   DateTime @default(now())
+
+  @@index([ranAt])
 }
 
 model Report {

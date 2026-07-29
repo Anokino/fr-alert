@@ -1,4 +1,5 @@
-import { cached, fetchJson } from "../cache";
+import { fetchJson } from "../cache";
+import { snapshot } from "../snapshot";
 import { bboxCenter, distanceKm, pointInBBox } from "../geo";
 import type { Incident, IncidentSource, LatLng, Severity } from "../types";
 
@@ -57,7 +58,7 @@ interface ActiveTroncon {
  * amont évite de garder les géométries de 337 tronçons en mémoire pour rien.
  */
 async function activeTroncons(ttlSeconds: number): Promise<ActiveTroncon[]> {
-  return cached("vigicrues:actifs", ttlSeconds, async () => {
+  return snapshot("vigicrues:actifs", ttlSeconds, async () => {
     const feed = await fetchJson<VigicruesFeed>(FEED_URL);
     const bulletinAt = feed.DtHrInfoVigiCru ?? new Date().toISOString();
 
@@ -106,6 +107,8 @@ export const vigicruesSource: IncidentSource = {
   attribution: "Vigicrues · SCHAPI (Licence ouverte)",
   // Le bulletin est réédité au moins toutes les heures (réf. datée à l'heure).
   ttlSeconds: 10 * 60,
+  // Flux national de ~2 Mo, filtré par bbox ensuite → ingérable d'avance.
+  scope: "national",
 
   async fetch(ctx): Promise<Incident[]> {
     const troncons = await activeTroncons(this.ttlSeconds);

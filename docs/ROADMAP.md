@@ -1,6 +1,6 @@
 # Roadmap & état d'avancement
 
-Dernière mise à jour : **2026-07-16**. Légende : `[x]` fait · `[~]` en cours · `[ ]` à faire.
+Dernière mise à jour : **2026-07-29**. Légende : `[x]` fait · `[~]` en cours · `[ ]` à faire.
 
 > Tout ce qui est marqué ✅ a été **vérifié en direct sur données réelles** (appel API réel +
 > rendu observé), pas seulement compilé. Les pièges rencontrés sont dans `docs/SOURCES.md`.
@@ -16,9 +16,11 @@ Dernière mise à jour : **2026-07-16**. Légende : `[x]` fait · `[~]` en cours
 | Sources de données live | ✅ **11/11 branchées et vérifiées** |
 | Couches de carte (épingles / nappe / zones) | ✅ complet, couches paramétrables |
 | Fiabilité (fail-soft, `stale`, auto-réparation) | ✅ complet |
-| **Loaders de boutons + barre d'adresse & URL** | ⏭️ **prochaine étape** |
+| Loaders de boutons + barre d'adresse & URL | ✅ complet |
+| **Split web / worker d'ingestion + prêt à déployer** | ✅ **complet, vérifié en direct** |
 | Priorisation / score d'importance | ⬜ chantier v2 |
 | Crawler de statuts d'événements | ⬜ chantier v2 |
+| Rework du layout du module | ⬜ chantier v2 |
 | Notifications push mobile | ⬜ v2 |
 
 ---
@@ -136,9 +138,47 @@ Ces chantiers sont nés des sessions, pas du périmètre v1 — d'où leur prés
       hérité par le module feu ; National choisi sur le module → hérité par l'accueil.
 
 > **Chantier « prochaine étape » terminé.** Loaders, synchro URL, barre d'adresse **et point
-> partagé** : livrés et vérifiés, app **et** API. Prochains chantiers : v2 (§4) — score
-> d'importance, crawler de statuts, rework du layout du module (maintenant chargé : barre
-> d'adresse + rayon + couches + fenêtre).
+> partagé** : livrés et vérifiés, app **et** API.
+
+---
+
+## 3 bis. Split web / ingestion + mise en production (2026-07-29) — **terminé**
+
+Décidé après examen de l'hébergement cible : l'app était autonome (chaque visiteur déclenchait
+les appels amont). Les chantiers v2 §4 — score **national** et crawler de chronologie — ne
+peuvent pas vivre dans un route handler ; le worker est leur foyer naturel. Détail des
+motivations : `ARCHITECTURE.md` § « Deux exécutions ».
+
+- [x] **Instantané persistant** ✅ — `core/snapshot.ts` + tables `Snapshot` / `SourceRun`.
+      S'utilise comme `cached()` (même clé/TTL/producteur), donc **aucun adaptateur réécrit** :
+      zéro régression de comportement (positionnement Vigicrues, commune Météo-France…).
+- [x] **`scope: "national" | "local"`** ✅ dans les contrats de source, + `ingestParams` pour
+      les couches réglables (les 4 fenêtres EFFIS sont chacune pré-ingérées).
+- [x] **Worker d'ingestion** ✅ — `src/worker/ingest.ts` (`npm run ingest [--force] [--only=]`).
+      Itère le registre, ne rafraîchit que ce qui a expiré, consigne chaque passage.
+      **Aucune source en dur, et le cron n'a jamais besoin d'être retouché** (la cadence est le
+      `ttlSeconds` de chaque source).
+- [x] **Prêt à déployer** ✅ — `server.js` (entrée Passenger, `listen('passenger')`),
+      `tsconfig.worker.json` → `dist/` en CommonJS, scripts `build` / `build:worker` / `ingest`,
+      `GET /api/health`, `.gitignore` (WAL), `.env.example` (`FA_INGEST`, chemin absolu).
+- [x] **Runbook** ✅ — `docs/DEPLOY.md` : app Node cPanel, `.env`, build, première ingestion,
+      bascule `FA_INGEST=1`, ligne de cron `flock`, vérification, mise à jour, dépannage.
+
+**Vérifié en direct le 2026-07-29** (pas seulement compilé) :
+
+| Contrôle | Résultat |
+|---|---|
+| Ingestion réelle | 13 unités, 12 ok — 1 timeout EFFIS (instabilité documentée, fail-soft) |
+| FIRMS (chemin utilisateur) | **33 464 ms → 11 ms** |
+| Couches du module feu | **45 s → 1 ms** |
+| Journal SQLite | `wal` |
+| Mode délégué (`FA_INGEST=1`) | 15 incidents en 255 ms, dont l'essentiel = Open-Meteo (`local`, appel légitime) |
+| Donnée non ingérée | `ok: false` — **pas** un faux « rien à signaler » |
+| `server.js` + `npm run build` | démarrage et build de production OK |
+
+> **Deux bugs attrapés à l'exécution, invisibles au typecheck** — encore une fois :
+> `PRAGMA journal_mode` refusé par `$executeRaw` (le WAL n'était jamais activé, en silence),
+> et le worker qui ne lisait pas `.env` (cron n'hérite pas des variables du cPanel).
 
 ---
 
@@ -164,6 +204,12 @@ Ces chantiers sont nés des sessions, pas du périmètre v1 — d'où leur prés
 - [ ] Crawler périodique (préfectures, presse locale, pompiers, communiqués). L'extraction
       depuis du texte libre est le terrain légitime d'un LLM ; le statut affiché reste **sourcé
       et daté**.
+
+> **L'infrastructure est là** (§3 bis) : le worker tourne déjà par cron et sait écrire en base.
+> Un crawler = une nouvelle unité d'ingestion à côté des sources, et une table de statuts.
+> Reste à faire, dans l'ordre : **sonder** les sources candidates en direct (préfectures,
+> presse) avant d'écrire la moindre ligne — c'est la méthode du projet, et aucune de ces
+> sources n'a encore été vérifiée.
 
 ### Interface
 - [ ] **Rework complet du layout du module** — acté : rayon + couches + fenêtre + barre

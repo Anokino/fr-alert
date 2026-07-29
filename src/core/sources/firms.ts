@@ -1,4 +1,5 @@
-import { cached, fetchText } from "../cache";
+import { fetchText } from "../cache";
+import { snapshot } from "../snapshot";
 import {
   FRANCE_BBOX,
   distanceKm,
@@ -154,7 +155,7 @@ function todayMinusDays(n: number): string {
  * C'est ce qui rend l'adaptateur auto-réparant : on n'a aucun avis sur quel satellite vole.
  */
 async function liveSensors(key: string): Promise<string[]> {
-  return cached("firms:live-sensors", 3600, async () => {
+  return snapshot("firms:live-sensors", 3600, async () => {
     const rows = parseCsv(await fetchText(`${BASE}/api/data_availability/csv/${key}/ALL`));
     const floor = todayMinusDays(MAX_FEED_AGE_DAYS);
     const live = rows
@@ -245,7 +246,7 @@ function summarise(group: Detection[]): Cluster | null {
  * seraient pas stables (ils le doivent — futures notifications).
  */
 async function nationalDetections(key: string, ttlSeconds: number): Promise<Detection[]> {
-  return cached("firms:detections", ttlSeconds, async () => {
+  return snapshot("firms:detections", ttlSeconds, async () => {
     const sensors = await liveSensors(key);
     if (!sensors.length) return [];
 
@@ -283,7 +284,7 @@ async function nationalDetections(key: string, ttlSeconds: number): Promise<Dete
 /** Foyers nationaux : regrouper d'abord (sur tout le nuage), écarter les éteints ensuite. */
 async function nationalClusters(key: string, ttlSeconds: number): Promise<Cluster[]> {
   const dets = await nationalDetections(key, ttlSeconds);
-  return cached("firms:clusters", ttlSeconds, async () =>
+  return snapshot("firms:clusters", ttlSeconds, async () =>
     cluster(dets).flatMap((g) => summarise(g) ?? []),
   );
 }
@@ -301,6 +302,10 @@ export const firmsSource: IncidentSource = {
   attribution: "NASA FIRMS (VIIRS / MODIS)",
   ttlSeconds: 15 * 60,
   requiresEnv: "FIRMS_MAP_KEY",
+  // Le regroupement est déjà national par construction (ids stables, cf. en-tête) : c'est
+  // exactement la forme qu'attend l'ingestion. Sort du chemin utilisateur le téléchargement
+  // des 4 capteurs, le clustering et l'appel EFFIS du filtre contextuel.
+  scope: "national",
 
   async fetch(ctx): Promise<Incident[]> {
     const key = process.env.FIRMS_MAP_KEY;
@@ -398,6 +403,8 @@ export const firmsHeatPoi: PoiSource = {
   attribution: "NASA FIRMS (VIIRS / MODIS)",
   ttlSeconds: 15 * 60,
   requiresEnv: "FIRMS_MAP_KEY",
+  // Même instantané de détections que la source d'incidents ci-dessus.
+  scope: "national",
 
   async fetch(ctx): Promise<Poi[]> {
     const key = process.env.FIRMS_MAP_KEY;

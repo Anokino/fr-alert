@@ -1,7 +1,7 @@
 # France Alert — ARCHITECTURE
 
 Complément technique de `CONTEXT.md`. Décrit l'arborescence **réelle**, le flux de données et
-les décisions d'implémentation. Mis à jour le 2026-07-16.
+les décisions d'implémentation. Mis à jour le 2026-07-29.
 
 ## Arborescence
 
@@ -12,10 +12,16 @@ fr-alert/
 ├── README.md                  # démarrage rapide + routes API
 ├── docs/
 │   ├── SOURCES.md             # catalogue des sources + pièges vérifiés (lire avant d'y toucher)
-│   └── ROADMAP.md             # état d'avancement : livré / prochaine étape / backlog
-├── .env.example               # DATABASE_URL + clés optionnelles (FIRMS, Météo-France)
-├── prisma/schema.prisma       # Report (signalements citoyens), SQLite
+│   ├── ROADMAP.md             # état d'avancement : livré / prochaine étape / backlog
+│   └── DEPLOY.md              # mise en ligne o2switch : app Node, cron, bascule, dépannage
+├── .env.example               # DATABASE_URL + FA_INGEST + clés optionnelles
+├── server.js                  # ENTRÉE WEB — chargée par Passenger (listen('passenger'))
+├── tsconfig.worker.json       # ENTRÉE WORKER — compile core+worker vers dist/ (CommonJS)
+├── scripts/postbuild-worker.mjs  # dépose dist/package.json {"type":"commonjs"}
+├── prisma/schema.prisma       # Report · Snapshot · SourceRun (SQLite)
 └── src/
+    ├── worker/
+    │   └── ingest.ts          # WORKER : une passe d'ingestion, lancé par cron
     ├── app/
     │   ├── layout.tsx         # shell, polices, thème
     │   ├── globals.css        # tokens Tailwind v4 (OKLCH) + styles MapLibre
@@ -28,11 +34,15 @@ fr-alert/
     │       ├── modules/[slug]/route.ts  # méta + incidents d'un module
     │       ├── pois/route.ts            # couches contextuelles (+ params réglables)
     │       ├── reports/route.ts         # GET liste · POST création (Zod)
+    │       ├── health/route.ts          # état base + ingestion (vérif de déploiement)
     │       └── geo/reverse/route.ts     # commune d'un point (geo.api.gouv.fr)
     ├── core/                  # ← métier pur, agnostique UI et API
-    │   ├── types.ts           # CONTRATS : Incident, Poi, sources, modules, couches
+    │   │                      #   ⚠️ imports RELATIFS uniquement (pas d'alias @/) :
+    │   │                      #   compilé par tsc pour le worker, hors bundler Next
+    │   ├── types.ts           # CONTRATS : Incident, Poi, sources, modules, couches, scope
     │   ├── registry.ts        # registre des modules + agrégation fail-soft
     │   ├── cache.ts           # cache mémoire TTL + fetch avec timeout (fail-soft)
+    │   ├── snapshot.ts        # instantané PERSISTANT des données nationales (worker ↔ web)
     │   ├── geo.ts             # bbox, haversine, point-dans-polygone, distances
     │   ├── geocode.ts         # reverse-geocode commune (geo.api.gouv.fr)
     │   ├── departements.ts    # contours départementaux simplifiés (couches `fill`)
@@ -87,14 +97,71 @@ acceptent `bbox` **ou** `lat`+`lng`+`r`.)
 Les **couches de contexte** sont chargées séparément et à la demande :
 `GET /api/pois?module=fire&layers=…&bbox=…[&params]` — jamais au chargement initial.
 
+## Deux exécutions
+
+Le même dépôt produit **deux processus**, qui se rejoignent sur la base SQLite :
+
+```
+   cron ──▶ node dist/worker/ingest.js ──écrit──▶ ┌──────────┐
+                (scope: "national")                │  SQLite  │
+                                                   │ Snapshot │
+   Passenger ──▶ node server.js (Next) ──lit──────▶└──────────┘
+                (+ sources scope: "local", à la demande)
+```
+
+**Pourquoi.** Trois raisons, par ordre d'importance :
+
+1. **Les chantiers v2 l'exigent.** Le crawler de statuts (chronologie) est lent et
+   rate-limité : il ne peut pas vivre dans un route handler qui doit répondre en 200 ms. Le
+   score d'importance, lui, veut raisonner à l'échelle nationale, pas dans la bbox d'un
+   utilisateur. Et les notifications push (v2) ne peuvent structurellement rien déclencher si
+   la donnée n'est calculée que quand quelqu'un regarde.
+2. **La latence sort du chemin utilisateur.** Mesuré : FIRMS 33 464 ms → 11 ms, couches du
+   module feu 45 s → 1 ms.
+3. **La charge amont s'effondre** : une requête par source et par TTL, au lieu d'une par
+   utilisateur en cache froid.
+
+**Pourquoi un script one-shot et pas un démon.** Sur l'hébergement cible (Passenger sur
+mutualisé), un process de fond n'est pas garanti de survivre : Passenger arrête les processus
+applicatifs quand le trafic faiblit (comportement documenté du *dynamic scaling*), donc un
+`setInterval` meurt en silence — précisément la nuit, quand un feu peut démarrer. Constat
+confirmé sur place : o2switch maintient **son propre Redis** en vie par un cron toutes les
+10 minutes avec `flock`. Un script qui démarre, travaille et sort est la forme fiable ici, et
+reste valable partout ailleurs.
+
+**Le cron ne connaît aucune source.** Une seule ligne, à vie. La cadence de chaque source est
+son `ttlSeconds`, déjà présent dans le contrat ; le worker ne rafraîchit que ce qui a expiré.
+Ajouter une source ingérable = créer son fichier et déclarer `scope: "national"` — ni le cron,
+ni le worker, ni l'API ne changent.
+
+**L'app reste autonome sans worker.** `FA_INGEST=1` est un interrupteur : sans lui, le web
+appelle les APIs lui-même comme avant (plus lent, mais complet). C'est ce qui permet de
+développer normalement, de déployer avant d'avoir branché le cron, et de revenir en arrière.
+
 ## Décisions
 
 - **Agrégation côté serveur** : le client ne parle qu'à `/api/*`. Les clés restent serveur, le
   CORS des sources externes n'impacte pas le navigateur, le cache est mutualisé.
-- **Cache mémoire process** (`Map` + TTL, survit au HMR via `globalThis`). Remplaçable par
-  Redis derrière la même interface. ⚠️ Il survit aussi aux **changements de code** : après un
-  refactor de structure de données, redémarrer le serveur (déjà vécu : cache empoisonné par
-  l'ancienne forme → `TypeError`).
+- **Cache mémoire process** (`Map` + TTL, survit au HMR via `globalThis`) pour les données
+  **locales**, et comme niveau 1 devant l'instantané. ⚠️ Il survit aussi aux **changements de
+  code** : après un refactor de structure de données, redémarrer le serveur (déjà vécu : cache
+  empoisonné par l'ancienne forme → `TypeError`).
+- **Instantané persistant** (`core/snapshot.ts`, table `Snapshot`) pour les données
+  **nationales**. S'utilise exactement comme `cached()` — mêmes clé, TTL, producteur — donc
+  **aucun adaptateur n'a été réécrit** : basculer une source revient à changer l'appel de
+  cache et à déclarer `scope: "national"`. Le filtrage par bbox continue de tourner à chaque
+  requête, la réponse reste donc propre à l'utilisateur.
+  ⚠️ Corollaire du point précédent : un instantané **ne s'efface pas au redémarrage**. D'où
+  `SCHEMA_VERSION` dans le fichier — à incrémenter dès qu'on change la forme d'une charge utile.
+- **SQLite en WAL, deux process.** Le worker écrit pendant que le web lit : sans WAL,
+  l'écriture verrouille toute la base et les requêtes web échouent. ⚠️ Les `PRAGMA` se lisent
+  avec `$queryRaw` — `journal_mode` et `busy_timeout` renvoient une ligne, et Prisma refuse un
+  `execute` qui produit un résultat. Vécu : avec `$executeRaw`, les trois PRAGMA échouaient et
+  le WAL n'était jamais posé, en silence. Le worker journalise désormais le mode effectif.
+- **Une donnée nationale absente échoue franchement.** En mode délégué, si l'instantané n'a
+  jamais été produit, la source lève → le registre pose `ok: false`. Servir `[]` afficherait
+  « rien à signaler » alors que l'app est aveugle (principe produit n°3). Un instantané
+  seulement *périmé*, lui, est servi tel quel et sa fraîcheur est reportée.
 - **Fail-soft au registre, jamais dans l'adaptateur** : une source qui échoue *laisse remonter*
   son erreur ; `runSource`/`collectPois` loggent et posent `ok: false`. Un
   `catch { return [] }` local produirait une réponse vide annoncée comme un succès.
@@ -136,6 +203,8 @@ Les **couches de contexte** sont chargées séparément et à la demande :
 
 - **Nouvelle source** → 1 fichier `core/sources/*` implémentant `IncidentSource`/`PoiSource`,
   ajouté au module concerné. Cache et fail-soft sont gratuits. *Sonder l'API en direct d'abord.*
+  Si son appel amont ne dépend pas de la zone : passer son travail coûteux par `snapshot()` et
+  déclarer `scope: "national"` → elle est ingérée d'office, **sans toucher au cron**.
 - **Nouveau module** → 1 fichier `core/modules/*` + entrée dans `registry.ts`. API et UI
   suivent automatiquement.
 - **Nouvelle couche** → un `PoiLayer` dans le module (`render` + `source`, `weightProp` ou

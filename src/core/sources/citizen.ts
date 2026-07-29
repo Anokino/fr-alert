@@ -1,4 +1,6 @@
-import { prisma } from "@/lib/db";
+// Import relatif (et non l'alias `@/`) : `core/` doit rester compilable par `tsc` seul pour
+// le worker d'ingestion, qui tourne hors du bundler Next (cf. tsconfig.worker.json).
+import { prisma } from "../../lib/db";
 import { pointInBBox } from "../geo";
 import type { Incident, IncidentSource, Severity } from "../types";
 

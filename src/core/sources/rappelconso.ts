@@ -1,4 +1,5 @@
-import { cached, fetchJson } from "../cache";
+import { fetchJson } from "../cache";
+import { snapshot } from "../snapshot";
 import { FRANCE_CENTER } from "../geo";
 import type { Incident, IncidentSource, Severity } from "../types";
 
@@ -31,9 +32,11 @@ export const rappelConsoSource: IncidentSource = {
   label: "RappelConso — Rappels de produits",
   attribution: "RappelConso · DGCCRF",
   ttlSeconds: 60 * 60,
+  // Rappels nationaux : la donnée est la même pour tout le monde.
+  scope: "national",
 
   async fetch(): Promise<Incident[]> {
-    const data = await cached("rappelconso:latest", this.ttlSeconds, () =>
+    const data = await snapshot("rappelconso:latest", this.ttlSeconds, () =>
       fetchJson<RappelResponse>(
         `https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso-v2-gtin-espaces/records` +
           `?limit=12&order_by=date_publication%20desc`,

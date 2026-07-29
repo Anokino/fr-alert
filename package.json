@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
-    "start": "next start",
+    "build": "prisma generate && next build && npm run build:worker",
+    "build:worker": "tsc -p tsconfig.worker.json && node scripts/postbuild-worker.mjs",
+    "start": "node server.js",
+    "ingest": "node --env-file-if-exists=.env dist/worker/ingest.js",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "db:push": "prisma db push",
     "db:seed": "node --loader ts-node/esm prisma/seed.ts",
     "postinstall": "prisma generate"
