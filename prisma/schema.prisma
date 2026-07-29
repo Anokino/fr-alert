@@ -7,6 +7,19 @@
 
 generator client {
   provider = "prisma-client-js"
+
+  /// ⚠️ Moteurs de requête à embarquer, en plus de celui de la machine de build (`native`).
+  ///
+  /// Sur l'hébergement mutualisé, la session SSH et l'environnement d'exécution de Passenger
+  /// ne détectent PAS la même version d'OpenSSL : `npm run build` génère le moteur pour
+  /// `debian-openssl-1.1.x`, alors qu'au démarrage l'application réclame
+  /// `debian-openssl-1.0.x` et échoue sur `PrismaClientInitializationError`. Vécu le
+  /// 2026-07-29 — l'app démarrait, puis toute requête à la base échouait.
+  ///
+  /// Lister les deux cibles fait télécharger les deux moteurs : le bon est choisi à
+  /// l'exécution. Coût : quelques Mo de plus dans node_modules. Ne pas retirer sans avoir
+  /// vérifié en direct sur le serveur.
+  binaryTargets = ["native", "debian-openssl-1.0.x", "debian-openssl-1.1.x"]
 }
 
 datasource db {
