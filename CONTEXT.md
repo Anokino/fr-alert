@@ -5,7 +5,40 @@
 > qui doivent rester stables entre les sessions. Toute décision structurante nouvelle se
 > reporte ici.
 
-Dernière mise à jour : 2026-07-13.
+Dernière mise à jour : 2026-07-16.
+
+---
+
+## 0. Reprendre le projet (lire ceci en premier)
+
+Pour reprendre France Alert — humain ou nouvelle session IA — voici **tout** ce qu'il faut
+lire, dans l'ordre. Le repo est **auto-suffisant** : tout le savoir projet vit ici, pas
+besoin d'accès externe.
+
+**Documentation du repo (source de vérité)** :
+1. `CONTEXT.md` (ce fichier) — vision, périmètre, contrats de code stables, conventions, état.
+2. `ARCHITECTURE.md` — arborescence réelle, flux de données, décisions d'implémentation.
+3. `docs/SOURCES.md` — catalogue des sources externes : endpoints, pièges vérifiés en direct,
+   statut. **À lire avant de toucher à une source** (chaque API a ses traquenards documentés).
+4. `docs/ROADMAP.md` — état d'avancement complet : livré / en cours / à faire.
+5. `README.md` — démarrage rapide, table des routes API.
+
+**Skills à utiliser** (Claude Code) : pour toute UI, charger **`frontend-design`** (qualité
+visuelle) + **`web-design-guidelines`** (bonnes pratiques web, à lancer sur les fichiers
+modifiés). `design-guide` décrit un autre produit (Paperclip) — n'en garder que les principes
+transverses (tokens OKLCH sémantiques, `cn()`, CVA, sombre par défaut), pas ses chemins.
+
+**Mémoire Claude Code** (sessions IA sur cette machine, chargée automatiquement) :
+`~/.claude/projects/C--Users-nkolo-Documents-CODE-fr-alert/memory/` — index `MEMORY.md` +
+notes `france-alert-*.md`. Ce sont des **résumés/pointeurs** vers la doc du repo ci-dessus,
+pas une source parallèle : en cas de doute, le repo fait foi. (Non versionnés avec le repo car
+c'est le mécanisme de reprise auto de Claude Code ; le repo reste lisible sans eux.)
+
+**Méthode de travail établie** (voir §8 et l'historique) : **vérifier une source en direct
+avant de coder contre elle** (chaque API sondée a révélé un piège) ; **livrer, puis vérifier
+end-to-end** sur données réelles (screenshot / appel API), jamais supposer ; après un
+changement non trivial, **redémarrer le dev server** avant de conclure (le cache mémoire et le
+HMR gardent l'ancien état — plusieurs faux positifs déjà rencontrés).
 
 ---
 
@@ -181,6 +214,7 @@ interface IncidentSource {
   ttlSeconds: number;         // durée de cache
   requiresEnv?: string;       // nom de variable d'env si clé requise
   fetch(ctx: FetchContext): Promise<Incident[]>;   // fail-soft: throw autorisé, capté en amont
+  isStale?(ctx: FetchContext): Promise<boolean>;   // flux « répond 200 mais mort » → meta.stale
 }
 
 interface PoiSource {
@@ -188,6 +222,7 @@ interface PoiSource {
   label: string;
   attribution: string;
   ttlSeconds: number;
+  requiresEnv?: string;       // sans la clé, la couche n'est pas proposée
   fetch(ctx: FetchContext): Promise<Poi[]>;
 }
 
@@ -195,8 +230,13 @@ interface FetchContext {
   bbox: BBox;                 // [minLng, minLat, maxLng, maxLat]
   center?: { lat: number; lng: number };
   signal?: AbortSignal;
+  params?: Record<string, string>; // couches paramétrables (ex. { days: "3" } pour EFFIS)
 }
 ```
+
+`meta.sources[].stale` (posé par le registre via `isStale`) signale un flux qui répond mais
+sert de la donnée morte — un `count: 0` ne doit jamais être pris pour du calme réel sans
+l'avoir vérifié (vécu : satellite FIRMS Suomi-NPP mort renvoyant des CSV vides).
 
 ### 5.3 Contrat de module (`src/core/types.ts`)
 
@@ -326,4 +366,31 @@ rouge) — vernaculaire authentique de la sécurité civile FR, pas un accent d�
 
 ## 9. État d'avancement
 
-Voir `docs/ROADMAP.md`. Chaque session met à jour l'état des modules et des sources.
+Détail complet et à jour dans **`docs/ROADMAP.md`** (livré / en cours / à faire). Chaque
+session le met à jour.
+
+**Fait et vérifié en direct (au 2026-07-16)** : les 7 modules ; toutes les sources live
+(Open-Meteo, EMSC, Hub'Eau eau + hydro v2, RappelConso, Overpass, Vigicrues, FIRMS
+auto-réparant, Météo-France Vigilance + Météo des forêts, EFFIS) ; le système de **couches de
+module** à trois rendus (`pins` / `heatmap` / `fill`) avec couches **paramétrables**
+(`FetchContext.params`, ex. fenêtre des périmètres EFFIS) ; le **filtre contextuel** FIRMS ×
+EFFIS (seuil abaissé dans un périmètre de feu) ; le champ `stale` pour les flux morts.
+
+**Fait aussi le 2026-07-16 (chantier « barre d'adresse & loaders », app + API)** :
+- **Point+rayon dans l'API** (`bboxFromParams`) : `/api/incidents` et `/api/pois` acceptent
+  `lat`+`lng`(+`r`) en plus de `bbox`. Une URL décrit la zone (app, mobile, debug).
+- **Géocodage d'adresse** (`geocodeAddress` + `GET /api/geo/search`) via api-adresse.data.gouv.fr.
+- **Loaders de boutons réutilisables** (`usePending` + `PendingButton`) sur tous les boutons
+  d'action.
+- **Synchro URL** (`lib/url.ts`) : `mode`/`lat`/`lng`/`r`/`layers`/`days`, lus au montage et
+  réécrits à chaque changement. La position géoloc réelle n'est **jamais** écrite (donnée
+  personnelle) ; seule une adresse/coordonnée choisie l'est.
+- **Barre d'adresse** (`LocationBar`) : sélecteur « Ma position / Adresse / National »,
+  autocomplétion d'adresse, saisie de coordonnées GPS, mode national (France entière).
+- **Point d'observation partagé** (`context/LocationContext.tsx`, monté au layout racine) :
+  mode / adresse / rayon survivent à la navigation accueil ↔ module. Les couches et la fenêtre
+  EFFIS restent locales à la page module.
+
+**Prochaine étape** : chantiers v2 (voir `docs/ROADMAP.md` §4) — score d'importance
+déterministe, crawler de statuts d'événements, et le **rework du layout du module** (acté :
+rayon + couches + fenêtre + barre d'adresse s'empilent, c'est devenu chargé).

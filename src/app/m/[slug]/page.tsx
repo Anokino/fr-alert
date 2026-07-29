@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ArrowLeft, Info, Lightbulb, BookOpen, Plus } from "lucide-react";
-import { useGeolocation } from "@/hooks/useGeolocation";
-import { bboxAround, distanceKm } from "@/core/geo";
+import { ArrowLeft, Info, Lightbulb, BookOpen, Plus, Loader2 } from "lucide-react";
+import { distanceKm } from "@/core/geo";
 import { fetchModule, fetchPois } from "@/lib/api-client";
+import { readNumParam, readStrParam, writeParams } from "@/lib/url";
+import { useLocation } from "@/context/LocationContext";
 import type { ContextPanel, Incident, ModuleMeta, Poi } from "@/core/types";
 import { Icon } from "@/components/Icon";
 import { IncidentCard } from "@/components/IncidentCard";
 import { RadiusSelector, zoomForRadius } from "@/components/RadiusSelector";
+import { LocationBar } from "@/components/LocationBar";
 import { cn } from "@/lib/utils";
 
 const MapView = dynamic(
@@ -23,19 +25,25 @@ const PANEL_ICON = { advice: Lightbulb, info: Info, definition: BookOpen } as co
 
 export default function ModulePage() {
   const slug = String(useParams().slug);
-  const { position } = useGeolocation(true);
-  const [radius, setRadius] = useState(25);
+  // Point d'observation partagé par toute l'app (mode, point, rayon, zone) — cf. layout.
+  const { point, bbox, national, mode, radius, place, setRadius, onMode, onPoint } =
+    useLocation();
   const [data, setData] = useState<{ module: ModuleMeta; incidents: Incident[] } | null>(null);
   const [activeLayers, setActiveLayers] = useState<string[]>([]);
   const [pois, setPois] = useState<Poi[]>([]);
+  const [poisLoading, setPoisLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  // Fenêtre temporelle des périmètres de feux (couche effis-burnt), réglable.
+  // Fenêtre temporelle des périmètres de feux (couche effis-burnt), réglable — local au module.
   const [burntDays, setBurntDays] = useState(3);
 
-  const bbox = useMemo(
-    () => (position ? bboxAround(position, radius) : null),
-    [position, radius],
-  );
+  // Au montage : rejouer l'état LOCAL au module depuis l'URL (couches, fenêtre). Le point et
+  // le rayon sont gérés globalement par le LocationProvider.
+  useEffect(() => {
+    const layers = readStrParam("layers");
+    const days = readNumParam("days");
+    if (layers) setActiveLayers(layers.split(",").filter(Boolean));
+    if (days !== undefined) setBurntDays(days);
+  }, []);
 
   useEffect(() => {
     if (!bbox) return;
@@ -56,18 +64,29 @@ export default function ModulePage() {
   useEffect(() => {
     if (!bbox || activeLayers.length === 0) {
       setPois([]);
+      setPoisLoading(false);
       return;
     }
     let cancelled = false;
+    setPoisLoading(true);
     // La fenêtre `days` n'a d'effet que si la couche périmètres est active.
     const extra = burntActive ? { days: burntDays } : undefined;
-    fetchPois(slug, bbox, activeLayers, extra).then(
-      (p) => !cancelled && setPois(p),
-    );
+    fetchPois(slug, bbox, activeLayers, extra)
+      .then((p) => !cancelled && setPois(p))
+      .finally(() => !cancelled && setPoisLoading(false));
     return () => {
       cancelled = true;
     };
   }, [slug, bbox, activeLayers, burntActive, burntDays]);
+
+  // Refléter l'état LOCAL (couches, fenêtre) dans l'URL. Le point/rayon global est écrit par
+  // le LocationProvider — `writeParams` fusionne, pas de conflit.
+  useEffect(() => {
+    writeParams({
+      layers: activeLayers.join(",") || null,
+      days: burntActive ? burntDays : null,
+    });
+  }, [activeLayers, burntActive, burntDays]);
 
   function toggleLayer(id: string) {
     setActiveLayers((cur) =>
@@ -80,7 +99,7 @@ export default function ModulePage() {
   // Même règle que la home : « à proximité » = en cours et localisé. Les risques prévus
   // sont listés à part et n'apparaissent pas sur la carte (ils n'ont pas encore de lieu).
   const local = incidents.filter((i) => !i.national && !i.forecast);
-  const national = incidents.filter((i) => i.national);
+  const nationalIncidents = incidents.filter((i) => i.national);
   const forecast = incidents.filter((i) => i.forecast && !i.national);
 
   return (
@@ -117,10 +136,19 @@ export default function ModulePage() {
         </Link>
       </header>
 
-      {/* Rayon d'observation */}
-      <div className="mt-5">
-        <RadiusSelector value={radius} onChange={setRadius} />
-      </div>
+      {/* Point d'observation + rayon */}
+      <LocationBar
+        mode={mode}
+        onMode={onMode}
+        onPoint={onPoint}
+        currentLabel={place}
+        className="mt-5 items-start"
+      />
+      {!national && (
+        <div className="mt-3">
+          <RadiusSelector value={radius} onChange={setRadius} busy={loading} />
+        </div>
+      )}
 
       {/* Couches POI */}
       {mod && mod.poiLayers.length > 0 && (
@@ -143,7 +171,12 @@ export default function ModulePage() {
                 )}
                 style={on ? { background: "var(--primary)" } : undefined}
               >
-                <Icon name={l.icon} size={13} /> {l.label}
+                {on && poisLoading ? (
+                  <Loader2 size={13} className="animate-spin" aria-hidden />
+                ) : (
+                  <Icon name={l.icon} size={13} />
+                )}{" "}
+                {l.label}
               </button>
             );
           })}
@@ -163,12 +196,15 @@ export default function ModulePage() {
                 onClick={() => setBurntDays(d)}
                 aria-pressed={burntDays === d}
                 className={cn(
-                  "rounded-md px-2.5 py-1 text-xs font-medium transition",
+                  "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition",
                   burntDays === d
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
+                {poisLoading && burntDays === d && (
+                  <Loader2 size={12} className="animate-spin" aria-hidden />
+                )}
                 {d} j
               </button>
             ))}
@@ -179,10 +215,10 @@ export default function ModulePage() {
       {/* Carte */}
       <section className="mt-5 overflow-hidden rounded-2xl border border-border">
         <div className="h-[360px] w-full sm:h-[420px]">
-          {position && (
+          {point && (
             <MapView
-              center={position}
-              zoom={zoomForRadius(radius)}
+              center={point}
+              zoom={national ? 5 : zoomForRadius(radius)}
               incidents={local}
               pois={pois}
               poiLayers={mod?.poiLayers}
@@ -200,7 +236,7 @@ export default function ModulePage() {
               ? `${local.length} incident${local.length > 1 ? "s" : ""} à proximité`
               : "Situation locale"}
           </h2>
-          {local.length === 0 && national.length === 0 && forecast.length === 0 ? (
+          {local.length === 0 && nationalIncidents.length === 0 && forecast.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-surface/50 px-5 py-10 text-center text-sm text-muted-foreground">
               {loading ? "Chargement…" : "Aucun incident actif dans votre secteur."}
             </div>
@@ -213,11 +249,11 @@ export default function ModulePage() {
                   accent={mod?.accent}
                   moduleIcon={mod?.icon}
                   distanceKm={
-                    position ? distanceKm(position, { lat: inc.lat, lng: inc.lng }) : undefined
+                    point ? distanceKm(point, { lat: inc.lat, lng: inc.lng }) : undefined
                   }
                 />
               ))}
-              {national.map((inc) => (
+              {nationalIncidents.map((inc) => (
                 <IncidentCard
                   key={inc.id}
                   incident={inc}

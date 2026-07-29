@@ -125,6 +125,31 @@ export function pointWithinKmOfPolygon(
   return false;
 }
 
+/** Rayon par défaut (km) autour d'un point quand aucun n'est précisé. */
+export const DEFAULT_RADIUS_KM = 25;
+
+/**
+ * Résout la zone d'une requête API depuis ses query params, dans l'ordre :
+ *   1. `bbox=minLng,minLat,maxLng,maxLat`
+ *   2. `lat` + `lng` (+ `r` en km, défaut 25) → bbox autour du point
+ *   3. sinon `null` (l'appelant décide du fallback, souvent la France entière)
+ * Permet à une simple URL (app, mobile, debug) de décrire la zone sans calculer de bbox.
+ */
+export function bboxFromParams(params: URLSearchParams): BBox | null {
+  const bbox = parseBBox(params.get("bbox"));
+  if (bbox) return bbox;
+  const lat = Number(params.get("lat"));
+  const lng = Number(params.get("lng"));
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    const r = Number(params.get("r"));
+    return bboxAround(
+      { lat, lng },
+      Number.isFinite(r) && r > 0 ? r : DEFAULT_RADIUS_KM,
+    );
+  }
+  return null;
+}
+
 /** Parse "minLng,minLat,maxLng,maxLat" en BBox validée, ou null. */
 export function parseBBox(raw: string | null): BBox | null {
   if (!raw) return null;

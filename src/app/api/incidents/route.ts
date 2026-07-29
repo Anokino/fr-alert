@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { collectIncidents } from "@/core/registry";
-import { bboxCenter, parseBBox, FRANCE_BBOX } from "@/core/geo";
+import { bboxCenter, bboxFromParams, FRANCE_BBOX } from "@/core/geo";
 import { distanceKm } from "@/core/geo";
 
 export const runtime = "nodejs";
@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
-  const bbox = parseBBox(params.get("bbox")) ?? FRANCE_BBOX;
+  // Zone : bbox explicite, ou point+rayon (lat/lng/r), ou France entière par défaut.
+  const bbox = bboxFromParams(params) ?? FRANCE_BBOX;
   const modulesParam = params.get("modules");
   const moduleSlugs = modulesParam
     ? modulesParam.split(",").map((s) => s.trim()).filter(Boolean)

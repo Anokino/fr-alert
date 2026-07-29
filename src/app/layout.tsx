@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/SiteHeader";
+import { LocationProvider } from "@/context/LocationContext";
 
 const bricolage = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -44,11 +45,12 @@ export default function RootLayout({
         <a href="#contenu" className="skip-link">
           Aller au contenu
         </a>
-        <div className="relative z-10 flex min-h-dvh flex-col">
-          <SiteHeader />
-          <main id="contenu" className="flex-1">
-            {children}
-          </main>
+        <LocationProvider>
+          <div className="relative z-10 flex min-h-dvh flex-col">
+            <SiteHeader />
+            <main id="contenu" className="flex-1">
+              {children}
+            </main>
           <footer className="border-t border-border px-5 py-6 text-xs text-muted-foreground">
             <div className="mx-auto flex max-w-6xl flex-col gap-1">
               <p>
@@ -62,7 +64,8 @@ export default function RootLayout({
               </p>
             </div>
           </footer>
-        </div>
+          </div>
+        </LocationProvider>
       </body>
     </html>
   );

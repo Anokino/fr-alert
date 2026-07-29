@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { collectPois } from "@/core/registry";
-import { bboxCenter, parseBBox } from "@/core/geo";
+import { bboxCenter, bboxFromParams } from "@/core/geo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,10 +15,10 @@ export async function GET(req: NextRequest) {
   if (!moduleSlug) {
     return NextResponse.json({ error: "Paramètre 'module' requis" }, { status: 400 });
   }
-  const bbox = parseBBox(params.get("bbox"));
+  const bbox = bboxFromParams(params);
   if (!bbox) {
     return NextResponse.json(
-      { error: "Paramètre 'bbox' requis et valide" },
+      { error: "Zone requise : 'bbox' ou 'lat'+'lng'(+'r')" },
       { status: 400 },
     );
   }
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
   // Paramètres de couche réglables (tout sauf les clés réservées). Ex. `days` pour la
   // fenêtre temporelle des périmètres de feux.
-  const RESERVED = new Set(["module", "bbox", "layers"]);
+  const RESERVED = new Set(["module", "bbox", "layers", "lat", "lng", "r"]);
   const layerParams: Record<string, string> = {};
   for (const [k, v] of params.entries()) {
     if (!RESERVED.has(k)) layerParams[k] = v;

@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Rayons proposés autour de la position, en km. */
@@ -20,10 +21,13 @@ export function zoomForRadius(km: number): number {
 export function RadiusSelector({
   value,
   onChange,
+  busy,
   className,
 }: {
   value: number;
   onChange: (km: number) => void;
+  /** Chargement en cours : l'option active affiche un spinner. */
+  busy?: boolean;
   className?: string;
 }) {
   return (
@@ -41,12 +45,15 @@ export function RadiusSelector({
           onClick={() => onChange(r)}
           aria-pressed={value === r}
           className={cn(
-            "rounded-md px-3 py-1.5 text-sm font-medium transition",
+            "inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition",
             value === r
               ? "bg-primary text-primary-foreground"
               : "text-muted-foreground hover:text-foreground",
           )}
         >
+          {busy && value === r && (
+            <Loader2 size={13} className="animate-spin" aria-hidden />
+          )}
           {r} km
         </button>
       ))}
