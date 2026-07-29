@@ -21,12 +21,28 @@
  * c'est le rôle du worker (`npm run ingest`, appelé par cron). Voir docs/DEPLOY.md.
  */
 import { createServer } from "node:http";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import next from "next";
 
 const port = Number(process.env.PORT) || 3000;
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 
-const app = next({ dev: false, dir: process.cwd() });
+/**
+ * ⚠️ Racine de l'app déduite de l'emplacement de CE fichier — surtout pas de
+ * `process.cwd()`.
+ *
+ * Passenger démarre l'application depuis un répertoire courant qui n'est **pas** celui de
+ * l'app. Avec `process.cwd()`, Next cherchait `.next` ailleurs et échouait sur « Could not
+ * find a production build » — alors qu'un lancement manuel depuis le bon dossier
+ * fonctionnait, ce qui rendait la panne très trompeuse. Reproductible en une commande :
+ * `cd / && node -e "require('/chemin/vers/server.js')"`. Vécu le 2026-07-29.
+ *
+ * Next se sert aussi de ce `dir` pour charger `.env` : le fixer règle les deux problèmes.
+ */
+const appDir = import.meta.dirname ?? dirname(fileURLToPath(import.meta.url));
+
+const app = next({ dev: false, dir: appDir });
 const handle = app.getRequestHandler();
 
 const server = createServer((req, res) => {
@@ -44,7 +60,11 @@ app
     // ReferenceError quand elle n'existe pas (dev, VPS).
     if (typeof PhusionPassenger !== "undefined") {
       server.listen("passenger", () => {
-        console.log("[server] France Alert démarré (Passenger)");
+        // `cwd` est journalisé volontairement : c'est l'écart entre lui et `appDir` qui a
+        // causé une panne difficile à diagnostiquer (voir le commentaire sur `appDir`).
+        console.log(
+          `[server] France Alert démarré (Passenger) — appDir=${appDir} cwd=${process.cwd()}`,
+        );
       });
     } else {
       server.listen(port, hostname, () => {
